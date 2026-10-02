@@ -780,14 +780,17 @@ function renderCab(){
   const fin=el('select',{id:'cab-shell'}); SHELL_OPTIONS[c.family||'outdoor'].forEach(([n,v])=>{ const o=el('option',{value:v},n); if(c.shell===v) o.selected=true; fin.append(o); });
   fin.addEventListener('change',()=>{ c.shell=fin.value; update(); });
 
-  const apply=(withSample)=>{
+  const apply=(mode)=>{   // 'sample' | 'empty' | 'swap'
     if(!preset) return;
     const cab=clone(preset.cab);
     const keepShell=SHELL_OPTIONS[cab.family].some(([,v])=>v===c.shell); if(keepShell) cab.shell=c.shell;
-    if(withSample){ const s=fromPreset(preset); s.cab=cab; s.sheet=S.sheet||s.sheet; S=s; }
+    const sheet=Object.assign({logo:null,drawn:''},S.sheet||{},{project:''});
+    if(mode==='sample'){ const s=fromPreset(preset); s.cab=cab; s.sheet=sheet; S=s; }
+    else if(mode==='empty'){ const s=fromPreset(preset); s.cab=cab; s.sheet=sheet; s.items=[]; s.ups=Object.assign(s.ups,{enabled:false}); S=s; }
     else { S.cab=cab; if(S.ups.startU+S.ups.heightU-1>cab.rackU) S.ups.enabled=false; }
+    if(mode!=='swap'){ delete S.projectId; savedSnap=null; }
     sel=null; renderCab(); renderUps(); renderEditor(); update(); setView(view);
-    flash(`${cab.name} loaded${withSample?' with a sample fit-out':''}.`);
+    flash(`${cab.name} loaded${mode==='sample'?' with a sample fit-out':mode==='empty'?' with an empty rack':''}.`);
   };
 
   b.replaceChildren(
@@ -796,8 +799,9 @@ function renderCab(){
       el('label',{class:'fld'},el('span',{},pick.family==='outdoor'?'Dynamix ROD outdoor freestanding, IP45':'Dynamix D-Series swing-frame wall mount'),el('div',{class:'in'},msel)),
       preset && preset.note ? el('p',{class:'note warnnote'},preset.note) : '',
       el('div',{class:'btns'},
-        el('button',{class:'btn primary',onclick:()=>apply(true)},'Load with sample fit-out'),
-        el('button',{class:'btn',onclick:()=>apply(false)},'Swap cabinet, keep equipment'))
+        el('button',{class:'btn primary',onclick:()=>apply('sample')},'Load with sample fit-out'),
+        el('button',{class:'btn',onclick:()=>apply('empty')},'Load empty'),
+        el('button',{class:'btn',onclick:()=>apply('swap')},'Swap cabinet, keep equipment'))
     ),
     el('div',{class:'grid2'},
       txt('Cabinet name',c,'name','cab-name'),
