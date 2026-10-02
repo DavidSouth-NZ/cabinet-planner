@@ -57,6 +57,9 @@ details.sec>summary .count{margin-left:auto;font:500 .75rem var(--mono);color:va
 .in{display:flex;align-items:center;border:1px solid var(--line);border-radius:5px;background:var(--panel);min-width:0}
 .in:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 25%,transparent)}
 .in input,.in select{border:0;background:transparent;padding:6px 8px;width:100%;min-width:0;outline:none}
+.in select{color:var(--fg);font-weight:500;cursor:pointer}
+select option,select optgroup{color:var(--fg);background-color:var(--raise)}
+select option:checked{color:var(--fg);background-color:var(--line)}
 .in input[type=number]{font-family:var(--mono);font-size:.85rem;font-variant-numeric:tabular-nums}
 .in em{font-style:normal;font:.72rem var(--mono);color:var(--muted);padding-right:8px}
 .in input[type=color]{padding:2px;height:32px;cursor:pointer}
@@ -108,7 +111,8 @@ textarea{width:100%;min-height:110px;border:1px solid var(--line);border-radius:
 .warnnote{color:var(--warn)}
 .picker{display:flex;flex-direction:column;gap:8px;padding-bottom:10px;border-bottom:1px dashed var(--line)}
 .picker .seg{align-self:flex-start}
-.sub-dims>summary{cursor:pointer;font-size:.82rem;font-weight:600;color:var(--accent);padding:2px 0}
+.sub-dims>summary{cursor:pointer;font-size:.85rem;font-weight:600;color:var(--fg);padding:2px 0}
+.sub-dims>summary::marker{color:var(--muted)}
 .sub-dims[open]>summary{margin-bottom:8px}
 .sub-dims .note{margin-top:8px}
 
