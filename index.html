@@ -370,11 +370,7 @@ function sampleFit(cab){
   else if(upsH){ items.push({label:'UPS 1kVA',type:'ups',u:1,h:2,depth:d(400),cable:0,color:TYPE_COL.ups}); }
   items.forEach(i=>{ i.id=uid(); i.mount='front'; });
   const I={W:cab.W-2*cab.side, H:cab.H-cab.floor-cab.roof};
-  const fixtures=[];
-  if(I.H >= 450+60){
-    const panelUp = I.H-50 >= 640+450 ? 640 : Math.round((I.H-450)/2);
-    fixtures.push({id:uid(), name:'Access control panel', orient:'front', w:400, h:450, d:110, x:Math.round((I.W-400)/2), y:panelUp, z:0, clearance:20, color:'#d99a2b'});
-  }
+  const fixtures=[];   // project-specific panels (e.g. access control) are added by the user
   if(cab.filters) fixtures.push({id:uid(), name:'Door vent filter (approx.)', orient:'front', w:490, h:265, d:25, x:105, y:345, z:0, clearance:0, color:'#8b9196'});
   return {ups:{enabled:upsH>0,startU:1,heightU:upsH||2,depth:d(deep?650:indoor?Math.min(450,room):450)}, items, fixtures};
 }
@@ -989,7 +985,7 @@ function renderAccessories(){
   body.append(el('p',{class:'note'},'Rack accessories appear in the equipment list. Vertical cable managers are placed as fixtures beside the rails.'));
 }
 
-$('addFix').onclick=()=>{ const I=inner(); const n={id:uid(),name:'New panel',orient:'side',w:200,h:250,d:80,x:0,y:200,z:Math.round(I.D/2-100),clearance:20,color:'#c98a3a'}; S.fixtures.push(n); select('fix',n.id); };
+$('addFix').onclick=()=>{ const I=inner(); const n={id:uid(),name:'New panel',orient:'side',w:200,h:250,d:80,x:0,y:200,z:Math.round(I.D/2-100),clearance:20,color:'#d99a2b'}; S.fixtures.push(n); select('fix',n.id); };
 
 /* ---------- conflict panel ---------- */
 function renderConflicts(){
