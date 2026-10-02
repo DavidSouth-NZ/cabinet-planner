@@ -1,0 +1,1469 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="3D planner for 19-inch data cabinets: RU placeholders, UPS space, access panels, clash checking and A3 PDF drawings.">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Data Cabinet Planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: operator console. Fixed spec sidebar (cabinet, UPS, equipment, fixtures) beside a full-bleed 3D viewport with an overlaid clash register. */
+:root{
+  --bg:#e9edf1; --panel:#f5f7f9; --raise:#ffffff; --fg:#16202a; --muted:#5b6876; --line:#d2d9e0;
+  --accent:#1d6b88; --accent-fg:#ffffff; --err:#c3342c; --warn:#a86a12; --ok:#2c7a4b;
+  --scene:#dde3e9; --grid:#b4bfca; --shell:#8d9aa7; --shell-edge:#4f5c69; --rail:#76818c; --plinth:#59636d; --ups:#2c8a52;
+  --display:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#11161b; --panel:#161d23; --raise:#1d262e; --fg:#e2e8ee; --muted:#93a0ad; --line:#2a343e;
+  --accent:#5ab0cd; --accent-fg:#0b1a20; --err:#f06a5e; --warn:#e2a443; --ok:#5cbd82;
+  --scene:#0f1418; --grid:#27313a; --shell:#7f8d99; --shell-edge:#8c99a5; --rail:#9aa5ae; --plinth:#3a434b; --ups:#4cc27f;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11161b; --panel:#161d23; --raise:#1d262e; --fg:#e2e8ee; --muted:#93a0ad; --line:#2a343e;
+  --accent:#5ab0cd; --accent-fg:#0b1a20; --err:#f06a5e; --warn:#e2a443; --ok:#5cbd82;
+  --scene:#0f1418; --grid:#27313a; --shell:#7f8d99; --shell-edge:#8c99a5; --rail:#9aa5ae; --plinth:#3a434b; --ups:#4cc27f;
+  color-scheme:dark}
+
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font:15px/1.45 var(--body);}
+*{box-sizing:border-box}
+button,input,select,textarea{font:inherit;color:inherit}
+.app{display:grid;grid-template-columns:minmax(300px,370px) 1fr;height:100%}
+.side{overflow:auto;background:var(--panel);border-right:1px solid var(--line);padding:16px;display:flex;flex-direction:column;gap:12px}
+.brand h1{font:700 1.45rem/1.1 var(--display);letter-spacing:.01em;margin:0;text-wrap:balance}
+.brand .sub{font:500 .8rem/1.4 var(--mono);color:var(--muted);margin-top:6px;font-variant-numeric:tabular-nums}
+.legend{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:.8rem;color:var(--muted);margin-top:8px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:10px;height:10px;border-radius:2px;display:inline-block}
+
+details.sec{border:1px solid var(--line);border-radius:6px;background:var(--raise)}
+details.sec>summary{cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;font:600 .78rem/1 var(--display);text-transform:uppercase;letter-spacing:.09em}
+details.sec>summary::-webkit-details-marker{display:none}
+details.sec>summary::after{content:"";width:7px;height:7px;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:rotate(-45deg);transition:transform .15s}
+details.sec[open]>summary::after{transform:rotate(45deg)}
+details.sec>summary .count{margin-left:auto;font:500 .75rem var(--mono);color:var(--muted);letter-spacing:0;text-transform:none}
+.body{padding:0 12px 12px;display:flex;flex-direction:column;gap:10px}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px}
+.fld{display:flex;flex-direction:column;gap:3px;min-width:0}
+.fld>span{font-size:.75rem;color:var(--muted);line-height:1.2}
+.fld.wide{grid-column:1/-1}
+.in{display:flex;align-items:center;border:1px solid var(--line);border-radius:5px;background:var(--panel);min-width:0}
+.in:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 25%,transparent)}
+.in input,.in select{border:0;background:transparent;padding:6px 8px;width:100%;min-width:0;outline:none}
+.in input[type=number]{font-family:var(--mono);font-size:.85rem;font-variant-numeric:tabular-nums}
+.in em{font-style:normal;font:.72rem var(--mono);color:var(--muted);padding-right:8px}
+.in input[type=color]{padding:2px;height:32px;cursor:pointer}
+.readout{font:.78rem/1.5 var(--mono);color:var(--muted);font-variant-numeric:tabular-nums;border-top:1px dashed var(--line);padding-top:8px}
+.check{display:flex;align-items:center;gap:8px;font-size:.88rem}
+
+.btn{border:1px solid var(--line);background:var(--raise);border-radius:5px;padding:6px 10px;cursor:pointer;font-weight:500;font-size:.85rem;line-height:1.2}
+.btn:hover{border-color:var(--accent)}
+.btn:focus-visible,.chip:focus-visible,.row:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.btn.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.btn.danger{color:var(--err)}
+.btns{display:flex;flex-wrap:wrap;gap:6px}
+
+.list{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:5px;overflow:hidden}
+.row{display:grid;grid-template-columns:12px 1fr auto auto;align-items:center;gap:8px;padding:6px 8px;background:var(--panel);border:0;border-bottom:1px solid var(--line);text-align:left;cursor:pointer;width:100%}
+.row:last-child{border-bottom:0}
+.row:hover{background:var(--raise)}
+.row.sel{background:color-mix(in srgb,var(--accent) 14%,var(--raise))}
+.row .sw{width:12px;height:12px;border-radius:2px}
+.row .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.88rem}
+.row .u{font:.75rem var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.pj{display:grid;grid-template-columns:1fr auto;align-items:center;gap:6px;padding:6px 8px;background:var(--panel);border-bottom:1px solid var(--line)}
+.pj:last-child{border-bottom:0}
+.pj.cur{background:color-mix(in srgb,var(--accent) 12%,var(--raise))}
+.pj .open{all:unset;cursor:pointer;min-width:0;display:flex;flex-direction:column;gap:1px}
+.pj .open:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pj .open b{font-weight:600;font-size:.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pj .open small{font:.72rem var(--mono);color:var(--muted)}
+.pj .acts{display:flex;gap:4px}
+.pj .acts .btn{padding:3px 7px;font-size:.75rem}
+.dirty{color:var(--warn);font-weight:600}
+.dot{width:8px;height:8px;border-radius:50%;background:transparent}
+.dot.err{background:var(--err)} .dot.warn{background:var(--warn)}
+.empty{padding:10px;color:var(--muted);font-size:.85rem}
+.editor{border-left:3px solid var(--accent);padding:10px 0 2px 10px;display:flex;flex-direction:column;gap:10px}
+.editor h3{margin:0;font:600 .95rem var(--display);letter-spacing:.02em}
+.nudge{display:flex;gap:4px}
+.nudge .btn{padding:4px 8px}
+.in .ax{border:0;border-left:1px solid var(--line);background:transparent;width:30px;align-self:stretch;cursor:pointer;font:600 1rem/1 var(--mono);color:var(--muted)}
+.in .ax:hover{color:var(--accent);background:var(--raise)}
+.in .ax:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.accgrp{display:flex;flex-direction:column;gap:6px}
+.accgrp h4{margin:0;font:600 .72rem/1 var(--display);text-transform:uppercase;letter-spacing:.09em;color:var(--muted)}
+.acc{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.acc .btn{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:7px 9px}
+.acc .btn small{font:.7rem var(--mono);color:var(--muted);font-weight:400}
+textarea{width:100%;min-height:110px;border:1px solid var(--line);border-radius:5px;background:var(--panel);padding:8px;font:.75rem/1.4 var(--mono)}
+.note{font-size:.78rem;color:var(--muted);line-height:1.4;margin:0}
+.warnnote{color:var(--warn)}
+.picker{display:flex;flex-direction:column;gap:8px;padding-bottom:10px;border-bottom:1px dashed var(--line)}
+.picker .seg{align-self:flex-start}
+.sub-dims>summary{cursor:pointer;font-size:.82rem;font-weight:600;color:var(--accent);padding:2px 0}
+.sub-dims[open]>summary{margin-bottom:8px}
+.sub-dims .note{margin-top:8px}
+
+.stage{position:relative;min-width:0;display:flex;flex-direction:column;min-height:0}
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:5px;overflow:hidden}
+.seg button{border:0;background:var(--raise);padding:5px 11px;cursor:pointer;font:600 .8rem var(--display);letter-spacing:.06em;text-transform:uppercase;border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}
+.seg button.on{background:var(--accent);color:var(--accent-fg)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--raise);border-radius:999px;padding:3px 10px;font-size:.78rem;cursor:pointer}
+.chip[aria-pressed=true]{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--raise))}
+.hint{font-size:.78rem;color:var(--muted);margin-left:auto}
+.vp{position:relative;flex:1;min-height:0;background:var(--scene)}
+.vp canvas{display:block;width:100%;height:100%;outline:none}
+.cf{position:absolute;left:16px;bottom:16px;width:min(460px,calc(100% - 32px));max-height:46%;display:flex;flex-direction:column;background:color-mix(in srgb,var(--raise) 94%,transparent);border:1px solid var(--line);border-radius:6px;box-shadow:0 6px 24px rgba(0,0,0,.14);backdrop-filter:blur(6px)}
+.cf-head{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line)}
+.pill{font:600 .78rem var(--display);letter-spacing:.07em;text-transform:uppercase;padding:3px 9px;border-radius:999px;color:#fff}
+.pill.ok{background:var(--ok)} .pill.err{background:var(--err)} .pill.warn{background:var(--warn)}
+.cf-head .btn{padding:3px 8px;font-size:.75rem}
+.cf-head .sp{flex:1}
+.cf ul{list-style:none;margin:0;padding:4px 0;overflow:auto}
+.cf li{display:grid;grid-template-columns:4px 1fr;gap:9px;padding:6px 10px;font-size:.85rem;line-height:1.35;cursor:pointer}
+.cf li:hover{background:var(--panel)}
+.cf li i{border-radius:2px;align-self:stretch}
+.cf li.err i{background:var(--err)} .cf li.warn i{background:var(--warn)}
+.cf.min ul{display:none}
+.sheet{position:absolute;inset:0;overflow:auto;background:var(--scene);padding:16px;display:flex;flex-direction:column;gap:12px;z-index:2}
+.sheet-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.sheet-bar strong{font:600 .95rem var(--display);letter-spacing:.03em}
+.sheet-fields{align-items:flex-end}
+.sheet-fields .fld{width:min(220px,100%)}
+.logo-ctl{display:flex;align-items:center;gap:8px}
+.logo-prev{width:72px;height:32px;border:1px dashed var(--line);border-radius:4px;background:#fff center/contain no-repeat}
+.sheet-paper{background:#fff;box-shadow:0 4px 22px rgba(0,0,0,.18);width:100%;max-width:1500px;margin:0 auto;border-radius:2px}
+.sheet-paper svg{display:block;width:100%;height:auto}
+.toast{position:absolute;right:16px;bottom:16px;display:flex;align-items:center;gap:10px;background:var(--fg);color:var(--bg);padding:8px 12px;border-radius:6px;font-size:.85rem;box-shadow:0 6px 20px rgba(0,0,0,.2)}
+.toast button{background:transparent;border:1px solid currentColor;color:inherit;border-radius:4px;padding:2px 8px;cursor:pointer}
+.nogl{position:absolute;inset:0;display:grid;place-items:center;padding:24px;text-align:center;color:var(--muted)}
+
+@media (max-width:820px){
+  html,body{height:auto}
+  .app{display:flex;flex-direction:column;height:auto}
+  .stage{order:-1;height:72vh;min-height:420px}
+  .side{overflow:visible;border-right:0;border-top:1px solid var(--line)}
+  .hint{display:none}
+  .cf{max-height:38%}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <h1 id="cabTitle">Data Cabinet Planner</h1>
+      <div class="sub" id="cabSub"></div>
+      <div class="legend">
+        <span><i style="background:#4f78a3"></i>Equipment</span>
+        <span><i style="background:var(--ups)"></i>UPS space</span>
+        <span><i style="background:#d99a2b"></i>Fixture</span>
+        <span><i style="background:var(--err)"></i>Clash</span>
+      </div>
+    </div>
+
+    <details class="sec" id="secProj" open>
+      <summary>Projects <span class="count" id="projCount"></span></summary>
+      <div class="body">
+        <label class="fld"><span>Project name (also shown on the drawing)</span><div class="in"><input type="text" id="pj-name" placeholder="e.g. Main gate access"></div></label>
+        <div class="btns">
+          <button class="btn primary" id="pjSave">Save</button>
+          <button class="btn" id="pjSaveAs">Save as new</button>
+          <button class="btn" id="pjNew">New project</button>
+        </div>
+        <p class="note" id="pjStatus" aria-live="polite"></p>
+        <div class="list" id="pjList"></div>
+        <details class="sub-dims">
+          <summary>Project files &amp; sharing</summary>
+          <p class="note">A project file holds the whole layout. Keep it in a shared folder or email it, then open it here to carry on.</p>
+          <div class="btns" style="margin-top:8px">
+            <button class="btn" id="pjFile">Save project file (.json)</button>
+            <label class="btn" for="importFile">Open project file</label>
+            <input type="file" id="importFile" accept=".json,application/json" hidden>
+          </div>
+          <div class="btns" style="margin-top:8px">
+            <button class="btn" id="copyJson">Copy layout text</button>
+            <button class="btn" id="resetEx">Reset to example</button>
+          </div>
+          <label class="fld" style="margin-top:8px"><span>Or paste layout text to load it</span><textarea id="importTxt" placeholder='{"cab": …}'></textarea></label>
+          <div class="btns"><button class="btn" id="importBtn">Load pasted layout</button></div>
+          <p class="note" id="ioMsg"></p>
+        </details>
+      </div>
+    </details>
+
+    <details class="sec" id="secCab" open>
+      <summary>Cabinet <span class="count" id="cabCount"></span></summary>
+      <div class="body" id="cabBody"></div>
+    </details>
+
+    <details class="sec" id="secUps">
+      <summary>UPS space <span class="count" id="upsCount"></span></summary>
+      <div class="body" id="upsBody"></div>
+    </details>
+
+    <details class="sec" open>
+      <summary>Rack equipment <span class="count" id="itemCount"></span></summary>
+      <div class="body">
+        <div class="btns">
+          <button class="btn" data-add="1">+ 1U</button>
+          <button class="btn" data-add="2">+ 2U</button>
+          <button class="btn" data-add="3">+ 3U</button>
+          <button class="btn" data-add="4">+ 4U</button>
+          <button class="btn" data-add="ups">+ UPS unit</button>
+        </div>
+        <div class="list" id="itemList"></div>
+        <div id="itemEditor"></div>
+      </div>
+    </details>
+
+    <details class="sec" open>
+      <summary>Accessories</summary>
+      <div class="body" id="accBody"></div>
+    </details>
+
+    <details class="sec" open>
+      <summary>Panels &amp; fixtures <span class="count" id="fixCount"></span></summary>
+      <div class="body">
+        <div class="btns"><button class="btn" id="addFix">+ Panel / fixture</button></div>
+        <div class="list" id="fixList"></div>
+        <div id="fixEditor"></div>
+      </div>
+    </details>
+
+  </aside>
+
+  <main class="stage">
+    <div class="toolbar">
+      <div class="seg" role="group" aria-label="View">
+        <button data-view="3d" class="on">3D</button>
+        <button data-view="front">Front</button>
+        <button data-view="side">Side</button>
+        <button data-view="top">Top</button>
+        <button data-view="sheet">Drawing</button>
+      </div>
+      <button class="btn" id="fitBtn">Reset view</button>
+      <div class="chips">
+        <button class="chip" data-t="door" aria-pressed="true">Door</button>
+        <button class="chip" data-t="walls" aria-pressed="true">Walls</button>
+        <button class="chip" data-t="labels" aria-pressed="true">Labels</button>
+        <button class="chip" data-t="cables" aria-pressed="true">Cable space</button>
+        <button class="chip" data-t="clear" aria-pressed="true">Clearances</button>
+      </div>
+      <span class="hint">Drag to move · Shift-drag panels on the other plane · arrow keys nudge</span>
+    </div>
+    <div class="vp" id="vp">
+      <canvas id="c" tabindex="0" aria-label="3D cabinet view"></canvas>
+      <div class="cf" id="cf">
+        <div class="cf-head"><span class="pill ok" id="cfPill">No clashes</span><span class="sp"></span>
+          <button class="btn" id="cfCopy">Copy report</button><button class="btn" id="cfMin">Hide</button></div>
+        <ul id="cfList"></ul>
+      </div>
+      <div class="sheet" id="sheet" hidden>
+        <div class="sheet-bar">
+          <strong>A3 layout drawing</strong>
+          <button class="btn primary" id="pdfBtn">Download PDF</button>
+          <button class="btn" id="svgBtn">Download SVG</button>
+          <span class="note" id="sheetMsg" aria-live="polite">Left side, front and right side at a common scale, with dimensions, legend and schedules.</span>
+        </div>
+        <div class="sheet-bar sheet-fields">
+          <div class="logo-ctl">
+            <span class="logo-prev" id="logoPrev" aria-hidden="true"></span>
+            <label class="btn" for="logoFile" id="logoAdd">Add company logo</label>
+            <input type="file" id="logoFile" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden>
+            <button class="btn danger" id="logoDel" hidden>Remove logo</button>
+          </div>
+          <label class="fld"><span>Project / site</span><div class="in"><input type="text" id="sh-project" placeholder="e.g. Main gate access"></div></label>
+          <label class="fld"><span>Drawn by</span><div class="in"><input type="text" id="sh-drawn" placeholder="Initials"></div></label>
+        </div>
+        <div class="sheet-paper" id="sheetPaper"></div>
+      </div>
+      <div class="toast" id="toast" hidden><span id="toastMsg"></span><button id="toastUndo">Undo</button></div>
+    </div>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/svg2pdf.js@2.2.3/dist/svg2pdf.umd.min.js"></script>
+<script>
+(function(){
+const U = 44.45;                 // 1 rack unit in mm
+const PANEL_W = 482.6;           // 19" front panel width incl. ears
+const BODY_W = 440;              // typical chassis width
+const RAIL_OPEN = 450;           // clear opening between rails
+const KEY = 'rack-planner-v2';
+const TYPE_COL = {device:'#4f78a3', passive:'#5f8682', ups:'#2f8a57', cable:'#6d7f8f', shelf:'#7c8590', blank:'#3e444a'};
+const uid = () => Math.random().toString(36).slice(2,9);
+const clone = o => JSON.parse(JSON.stringify(o));
+const fmt = n => Math.round(n).toLocaleString('en-NZ');
+
+/* ---------- cabinet catalogue ----------
+   Outdoor: Dynamix ROD vented freestanding IP45 (datasheet 03072026/ND).
+   From the drawing (800x800 model): body 799 W x 801 D, interior 662 x 725, rail holes 465 c/c,
+   front-to-rear rails 575 with ~75 clear in front and behind, plinth 100, rain hood 85.1 (850 wide, 832.2 deep),
+   first U 44.5 above the interior floor. 600-deep sheet: body 600.4 D, interior ~525.
+   Listed H is taken as body + rain hood (plinth extra), which matches the drawn L.
+   Estimated (not dimensioned on the drawing): floor/roof 20, door 40, rear wall split, 600-wide side walls. */
+const SHELL = {grey:'#b7bcbd', green:'#3d5b45'};
+function rodCab(code,u,W,D,Hlist){
+  const deep=D>=800, wide=W>=800, hood=85.1, body=Hlist-hood, floor=20, roof=20;
+  const side = wide ? 68.5 : 50, door=40, rear = deep ? 36 : 35.4;
+  const IH = body-floor-roof, fit = Math.floor((IH-44.5)/U);
+  return {code, family:'outdoor', title:`${code} · ${W}×${D}×${Hlist} mm`, note: u>fit ? `Rack set to ${fit}U: ${u}U does not fit the listed height, so confirm the rail height with Dynamix.` : '',
+    cab:{name:`Dynamix ${code}`, model:code, family:'outdoor', W:wide?799:600, D:deep?801:600.4, H:+body.toFixed(1), plinth:100, hood, hoodSide:wide?25.5:25, hoodFront:31.2,
+      side, door, rear, floor, roof, rackU:Math.min(u,fit), rackBase:44.5, railFront:75, mountDepth:(deep?725:525)-150, shell:SHELL.grey, filters:wide}};
+}
+/* Indoor: Dynamix D-Series 19" swing-frame wall cabinets (RSFDS). External W x D x H and RU from the table;
+   depth = 100 mm backmount + 350/450/500 swing frame. No dimensioned drawing, so the internal figures are estimates. */
+function rsfCab(code,u,W,D,H){
+  const side=20, door=22, rear=2, floor=30, roof=30, IH=H-floor-roof, ID=D-door-rear, railFront=80;
+  return {code, family:'indoor', title:`${code} · ${W}×${D}×${H} mm · ${u}RU`, note:'Internal clearances are estimated. The datasheet gives external sizes only.',
+    cab:{name:`Dynamix ${code}`, model:code, family:'indoor', W, D, H, plinth:0, hood:0, hoodSide:0, hoodFront:0,
+      side, door, rear, floor, roof, rackU:u, rackBase:+((IH-u*U)/2).toFixed(1), railFront, mountDepth:Math.max(150,Math.round(ID-railFront-110)), shell:'#26292d', filters:false}};
+}
+const CATALOGUE = {
+  outdoor:[
+    rodCab('ROD18-8X6',18,800,600,975), rodCab('ROD18-8X8',18,800,800,975),
+    rodCab('ROD24-8X6',24,800,600,1375), rodCab('ROD24-8X8',24,800,800,1375),
+    rodCab('ROD27-8X6',27,800,600,1575), rodCab('ROD27-8X8',27,800,800,1575),
+    rodCab('ROD45-6X6',45,600,600,2000)
+  ],
+  indoor:[
+    rsfCab('RSFDS4-450',4,600,450,281), rsfCab('RSFDS6-450',6,600,450,368), rsfCab('RSFDS6',6,600,550,368),
+    rsfCab('RSFDS9',9,600,550,501), rsfCab('RSFDS12',12,600,550,635), rsfCab('RSFDS12-600',12,600,600,635),
+    rsfCab('RSFDS18',18,600,550,901), rsfCab('RSFDS18-600',18,600,600,901), rsfCab('RSFDS24',24,600,550,1167),
+    rsfCab('RSFDS24-600',24,600,600,1167), rsfCab('RSFDS27-600',27,600,600,1365)
+  ]
+};
+const SHELL_OPTIONS = {outdoor:[['Grey',SHELL.grey],['Forest Green',SHELL.green]], indoor:[['Gloss black','#26292d']]};
+
+function sampleFit(cab){
+  const top=cab.rackU, indoor=cab.family==='indoor', ID=cab.D-cab.door-cab.rear, room=ID-cab.railFront-10;
+  const deep=cab.mountDepth>=500, d = v => Math.min(v, room);
+  const upsH = top>=18 ? 6 : top>=9 ? 2 : 0;
+  const shell = indoor ? ['Fixed shelf (supplied)','shelf',1,Math.min(ID-150,400),0,TYPE_COL.shelf]
+                       : [deep?'Fixed shelf RODFS-600':'Fixed shelf RODFS-400','shelf',1,deep?350:230,0,TYPE_COL.shelf];
+  const stack=[['Patch panel 24P','passive',1,120,60,TYPE_COL.passive],['1U brush cable manager','cable',1,80,60,TYPE_COL.cable],
+    ['Core switch','device',1,300,60,TYPE_COL.device],['Firewall / router','device',2,400,40,'#3f6690'],
+    ['Fibre ODF','passive',1,250,60,'#7a6aa0'],null,shell];
+  const items=[]; let u=top;
+  for(const s of stack){ if(!s){ u--; continue; } const bottom=u-s[2]+1; if(bottom<=upsH || bottom<1) break;
+    items.push({label:s[0],type:s[1],u:bottom,h:s[2],depth:d(s[3]),cable:s[4],color:s[5]}); u=bottom-1; }
+  if(upsH>=6){ items.push({label:'UPS 2kVA',type:'ups',u:1,h:2,depth:d(deep?600:430),cable:0,color:TYPE_COL.ups},
+                          {label:'UPS battery pack',type:'ups',u:3,h:2,depth:d(deep?600:430),cable:0,color:'#28734a'}); }
+  else if(upsH){ items.push({label:'UPS 1kVA',type:'ups',u:1,h:2,depth:d(400),cable:0,color:TYPE_COL.ups}); }
+  items.forEach(i=>{ i.id=uid(); i.mount='front'; });
+  const I={W:cab.W-2*cab.side, H:cab.H-cab.floor-cab.roof};
+  const fixtures=[];
+  if(I.H >= 450+60){
+    const panelUp = I.H-50 >= 640+450 ? 640 : Math.round((I.H-450)/2);
+    fixtures.push({id:uid(), name:'Access control panel', orient:'front', w:400, h:450, d:110, x:Math.round((I.W-400)/2), y:panelUp, z:0, clearance:20, color:'#d99a2b'});
+  }
+  if(cab.filters) fixtures.push({id:uid(), name:'Door vent filter (approx.)', orient:'front', w:490, h:265, d:25, x:105, y:345, z:0, clearance:0, color:'#8b9196'});
+  return {ups:{enabled:upsH>0,startU:1,heightU:upsH||2,depth:d(deep?650:indoor?Math.min(450,room):450)}, items, fixtures};
+}
+function fromPreset(p){ const cab=clone(p.cab); return Object.assign({cab, sheet:{logo:null,project:'',drawn:''}}, sampleFit(cab)); }
+const DEFAULT_PRESET = CATALOGUE.outdoor[3];
+const EXAMPLE = fromPreset(DEFAULT_PRESET);
+
+let S = load() || clone(EXAMPLE);
+let sel = null;          // {kind:'item'|'fix', id}
+let view = '3d';
+const T = {door:true, walls:true, labels:true, cables:true, clear:true};
+let conflicts = [], badIds = new Map();
+
+function load(){ try{ const s = JSON.parse(localStorage.getItem(KEY)); return valid(s) ? migrate(s) : null; }catch(e){ return null; } }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+function valid(s){ return s && s.cab && s.ups && Array.isArray(s.items) && Array.isArray(s.fixtures); }
+function migrate(s){
+  const c=s.cab;
+  if(c.wall!=null && c.side==null){ c.side=c.door=c.rear=c.floor=c.roof=c.wall; c.H=c.H-c.plinth; delete c.wall; }
+  const def={hood:0,hoodSide:0,hoodFront:0,shell:SHELL.grey,model:'',filters:false,family:'outdoor'};
+  for(const k in def) if(c[k]==null) c[k]=def[k];
+  if(!s.sheet) s.sheet={logo:null,project:'',drawn:''};
+  const I={W:c.W-2*c.side, D:c.D-c.door-c.rear};
+  s.fixtures.forEach(f=>{
+    if(f.x!=null) return;
+    const side = f.mount==='left'||f.mount==='right';
+    f.orient = side?'side':'front'; f.y=f.up||0;
+    if(side){ f.z=f.along||0; f.x = f.mount==='left' ? 0 : I.W-f.d; }
+    else { f.x=f.along||0; f.z = f.mount==='rear' ? I.D-f.d : 0; }
+    delete f.mount; delete f.along; delete f.up;
+  });
+  return s;
+}
+
+/* ---------- geometry (interior mm: x from left wall, y from floor, z from door inner face) ---------- */
+const inner = () => { const c=S.cab; return {W:c.W-2*c.side, H:c.H-c.floor-c.roof, D:c.D-c.door-c.rear}; };
+const overallH = () => S.cab.H + S.cab.plinth + S.cab.hood;
+const uY = u => S.cab.rackBase + (u-1)*U;
+const rearRail = () => S.cab.railFront + S.cab.mountDepth;
+function B(x0,x1,y0,y1,z0,z1){ return {x0:Math.min(x0,x1),x1:Math.max(x0,x1),y0:Math.min(y0,y1),y1:Math.max(y0,y1),z0:Math.min(z0,z1),z1:Math.max(z0,z1)}; }
+function inter(a,b,e=0.05){ const x0=Math.max(a.x0,b.x0),x1=Math.min(a.x1,b.x1),y0=Math.max(a.y0,b.y0),y1=Math.min(a.y1,b.y1),z0=Math.max(a.z0,b.z0),z1=Math.min(a.z1,b.z1);
+  return (x1-x0>e && y1-y0>e && z1-z0>e) ? {x0,x1,y0,y1,z0,z1} : null; }
+const grow = (b,c) => B(b.x0-c,b.x1+c,b.y0-c,b.y1+c,b.z0-c,b.z1+c);
+const within = (a,b) => a.x0>=b.x0-.05 && a.x1<=b.x1+.05 && a.y0>=b.y0-.05 && a.y1<=b.y1+.05 && a.z0>=b.z0-.05 && a.z1<=b.z1+.05;
+const uTop = it => it.u + it.h - 1;
+const uRange = it => it.h>1 ? `U${it.u}–${uTop(it)}` : `U${it.u}`;
+
+function itemBoxes(it){
+  const cx = inner().W/2, y0 = uY(it.u)+0.4, y1 = uY(it.u+it.h)-0.4, f = S.cab.railFront, r = rearRail();
+  if(it.mount==='rear'){
+    return { plate:B(cx-PANEL_W/2,cx+PANEL_W/2,y0,y1,r,r+3), body:B(cx-BODY_W/2,cx+BODY_W/2,y0,y1,r-it.depth,r),
+             cable: it.cable>0 ? B(cx-BODY_W/2,cx+BODY_W/2,y0,y1,r+3,r+3+it.cable) : null };
+  }
+  return { plate:B(cx-PANEL_W/2,cx+PANEL_W/2,y0,y1,f-3,f), body:B(cx-BODY_W/2,cx+BODY_W/2,y0,y1,f,f+it.depth),
+           cable: it.cable>0 ? B(cx-BODY_W/2,cx+BODY_W/2,y0,y1,f-3-it.cable,f-3) : null };
+}
+function rails(){
+  const cx=inner().W/2, c=S.cab, y0=c.rackBase, y1=c.rackBase+c.rackU*U, f=c.railFront, r=rearRail();
+  const L=[cx-PANEL_W/2, cx-RAIL_OPEN/2], R=[cx+RAIL_OPEN/2, cx+PANEL_W/2];
+  return [
+    {name:'front-left rail', box:B(L[0],L[1],y0,y1,f,f+40)}, {name:'front-right rail', box:B(R[0],R[1],y0,y1,f,f+40)},
+    {name:'rear-left rail', box:B(L[0],L[1],y0,y1,r-40,r)}, {name:'rear-right rail', box:B(R[0],R[1],y0,y1,r-40,r)}
+  ];
+}
+function upsBox(){ const cx=inner().W/2, u=S.ups; return B(cx-PANEL_W/2,cx+PANEL_W/2,uY(u.startU),uY(u.startU+u.heightU),S.cab.railFront-3,S.cab.railFront+u.depth); }
+function fixtureBox(f){
+  // x from left wall, y above floor, z from door (minimum corner). 'front' faces the door: width runs across, depth runs back.
+  // 'side' faces a side wall: width runs front-to-back, depth runs across.
+  return f.orient==='side' ? B(f.x,f.x+f.d,f.y,f.y+f.h,f.z,f.z+f.w) : B(f.x,f.x+f.w,f.y,f.y+f.h,f.z,f.z+f.d);
+}
+function fixtureWhere(f){
+  const I=inner(), b=fixtureBox(f), t=1;
+  if(b.z0<=t && f.orient!=='side') return 'Door';
+  if(b.z1>=I.D-t && f.orient!=='side') return 'Rear wall';
+  if(b.x0<=t && f.orient==='side') return 'Left wall';
+  if(b.x1>=I.W-t && f.orient==='side') return 'Right wall';
+  return 'Free';
+}
+function snapFixture(f,where){
+  const I=inner();
+  if(where==='door'){ f.orient='front'; f.z=0; }
+  if(where==='rear'){ f.orient='front'; f.z=+(I.D-f.d).toFixed(1); }
+  if(where==='left'){ f.orient='side'; f.x=0; }
+  if(where==='right'){ f.orient='side'; f.x=+(I.W-f.d).toFixed(1); }
+}
+
+/* ---------- clash detection ---------- */
+function computeConflicts(){
+  const out=[], I=inner(), c=S.cab, room=B(0,I.W,0,I.H,0,I.D);
+  const push = (sev,msg,ids,box) => out.push({sev,msg,ids:ids||[],box:box||null});
+  const name = it => it.label || 'Unnamed item';
+
+  if(I.W<=0||I.H<=0||I.D<=0){ push('err','Wall thickness and plinth leave no interior space. Check the cabinet dimensions.'); return out; }
+  const rackTop = c.rackBase + c.rackU*U;
+  if(rackTop > I.H+.05) push('err',`The ${c.rackU}U rack reaches ${fmt(rackTop)} mm above the floor, but the interior is only ${fmt(I.H)} mm high.`);
+  if(I.W < PANEL_W) push('err',`The interior is ${fmt(I.W)} mm wide, narrower than a 19" rack (${PANEL_W} mm).`);
+  if(rearRail() > I.D+.05) push('err',`The rear rails sit ${fmt(rearRail()-I.D)} mm behind the back wall. Reduce the front set-back or mounting depth.`);
+
+  S.items.forEach(it=>{
+    const b=itemBoxes(it);
+    if(it.u<1 || uTop(it)>c.rackU) push('err',`${name(it)} (${uRange(it)}) is outside the rack, which runs U1–U${c.rackU}.`,[it.id],b.plate);
+    if(b.body.z1 > I.D+.05) push('err',`${name(it)} is ${fmt(b.body.z1-I.D)} mm too deep for the cabinet.`,[it.id],B(b.body.x0,b.body.x1,b.body.y0,b.body.y1,I.D,b.body.z1));
+    if(b.body.z0 < -.05) push('err',`${name(it)} is ${fmt(-b.body.z0)} mm too deep and reaches the door.`,[it.id],B(b.body.x0,b.body.x1,b.body.y0,b.body.y1,b.body.z0,0));
+    if(b.cable){
+      if(b.cable.z0 < -.05) push('warn',`${name(it)} needs ${fmt(-b.cable.z0)} mm more space in front of the rail for its cabling.`,[it.id],B(b.cable.x0,b.cable.x1,b.cable.y0,b.cable.y1,b.cable.z0,0));
+      if(b.cable.z1 > I.D+.05) push('warn',`${name(it)} needs ${fmt(b.cable.z1-I.D)} mm more space behind the rail for its cabling.`,[it.id],B(b.cable.x0,b.cable.x1,b.cable.y0,b.cable.y1,I.D,b.cable.z1));
+    }
+  });
+
+  for(let i=0;i<S.items.length;i++) for(let j=i+1;j<S.items.length;j++){
+    const a=S.items[i], bb=S.items[j], A=itemBoxes(a), Bx=itemBoxes(bb); let hit=null;
+    for(const p of [A.plate,A.body]) for(const q of [Bx.plate,Bx.body]) if(!hit) hit=inter(p,q);
+    if(hit){ const lo=Math.max(a.u,bb.u), hi=Math.min(uTop(a),uTop(bb));
+      push('err',`${name(a)} and ${name(bb)} overlap at ${lo===hi?'U'+lo:'U'+lo+'–'+hi}.`,[a.id,bb.id],hit); }
+  }
+
+  if(S.ups.enabled){
+    const s=S.ups.startU, e=s+S.ups.heightU-1;
+    if(s<1||e>c.rackU) push('err',`The reserved UPS space (U${s}–U${e}) runs outside the rack.`);
+    S.items.forEach(it=>{
+      const overlap = it.u<=e && uTop(it)>=s;
+      if(it.type!=='ups' && overlap) push('err',`${name(it)} is in the reserved UPS space (U${s}–U${e}).`,[it.id],itemBoxes(it).plate);
+      if(it.type==='ups' && (it.u<s || uTop(it)>e)) push('warn',`${name(it)} is UPS equipment outside the reserved UPS space (U${s}–U${e}).`,[it.id]);
+      if(it.type==='ups' && it.depth>S.ups.depth) push('warn',`${name(it)} is ${fmt(it.depth-S.ups.depth)} mm deeper than the reserved UPS depth.`,[it.id]);
+    });
+  }
+
+  S.fixtures.forEach((f,fi)=>{
+    const fb=fixtureBox(f), eb=grow(fb,Math.max(0,f.clearance||0)), fn=f.name||'Fixture';
+    if(!within(fb,room)) push('err',`${fn} extends outside the cabinet interior.`,[f.id],fb);
+    const obs=[];
+    S.items.forEach(it=>{ const b=itemBoxes(it); obs.push({name:it.label||'Unnamed item',ids:[it.id],boxes:[b.plate,b.body]}); if(b.cable) obs.push({name:`the cable space of ${it.label}`,ids:[it.id],boxes:[b.cable],soft:true}); });
+    rails().forEach(r=>obs.push({name:`the ${r.name}`,ids:[],boxes:[r.box]}));
+    if(S.ups.enabled) obs.push({name:'the reserved UPS space',ids:[],boxes:[upsBox()]});
+    S.fixtures.forEach((g,gi)=>{ if(gi>fi) obs.push({name:g.name||'Fixture',ids:[g.id],boxes:[fixtureBox(g)]}); });
+    const hitIds=new Set();
+    obs.forEach(o=>{
+      if(o.soft && o.ids.some(id=>hitIds.has(id))) return;   // already reported a hard clash with this item
+      let hit=null, near=null;
+      o.boxes.forEach(b=>{ hit=hit||inter(fb,b); near=near||inter(eb,b); });
+      if(hit && !o.soft) o.ids.forEach(id=>hitIds.add(id));
+      if(hit) push(o.soft?'warn':'err',`${fn} ${o.soft?'blocks':'clashes with'} ${o.name}.`,[f.id,...o.ids],hit);
+      else if(near && f.clearance>0) push('warn',`${fn} is within its ${fmt(f.clearance)} mm clearance of ${o.name}.`,[f.id,...o.ids],near);
+    });
+  });
+  return out;
+}
+
+/* ---------- three.js scene ---------- */
+const vp=document.getElementById('vp'), canvas=document.getElementById('c');
+let renderer;
+try{ renderer=new THREE.WebGLRenderer({canvas,antialias:true}); }
+catch(e){ vp.insertAdjacentHTML('beforeend','<div class="nogl">3D view needs WebGL, which this browser has turned off.</div>'); }
+const scene=new THREE.Scene();
+const persp=new THREE.PerspectiveCamera(38,1,5,40000);
+const ortho=new THREE.OrthographicCamera(-1,1,1,-1,-40000,40000);
+let cam=persp, controls=null, root=new THREE.Group(), pickables=[];
+scene.add(root);
+scene.add(new THREE.HemisphereLight(0xffffff,0x48505a,.85));
+const d1=new THREE.DirectionalLight(0xffffff,.65); d1.position.set(1600,2600,2400); scene.add(d1);
+const d2=new THREE.DirectionalLight(0xffffff,.25); d2.position.set(-1800,900,-1600); scene.add(d2);
+if(renderer) renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+
+function css(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim() || '#888'; }
+function lum(hex){ const c=new THREE.Color(hex); return .2126*c.r+.7152*c.g+.0722*c.b; }
+function toWorld(b){ const I=inner(); return {cx:(b.x0+b.x1)/2-I.W/2, cy:(b.y0+b.y1)/2, cz:-(b.z0+b.z1)/2, sx:Math.max(b.x1-b.x0,.5), sy:Math.max(b.y1-b.y0,.5), sz:Math.max(b.z1-b.z0,.5)}; }
+function boxMesh(b,material){ const w=toWorld(b); const m=new THREE.Mesh(new THREE.BoxGeometry(w.sx,w.sy,w.sz),material); m.position.set(w.cx,w.cy,w.cz); root.add(m); return m; }
+function edgeBox(b,color,opacity=1,onTop=false){ const w=toWorld(b); const l=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w.sx,w.sy,w.sz)),new THREE.LineBasicMaterial({color,transparent:opacity<1||onTop,opacity,depthTest:!onTop})); l.position.set(w.cx,w.cy,w.cz); if(onTop) l.renderOrder=20; root.add(l); return l; }
+const std = (color,o={}) => new THREE.MeshStandardMaterial(Object.assign({color,roughness:.72,metalness:.12},o));
+
+function rr(g,x,y,w,h,r){ g.beginPath(); g.moveTo(x+r,y); g.lineTo(x+w-r,y); g.quadraticCurveTo(x+w,y,x+w,y+r); g.lineTo(x+w,y+h-r); g.quadraticCurveTo(x+w,y+h,x+w-r,y+h); g.lineTo(x+r,y+h); g.quadraticCurveTo(x,y+h,x,y+h-r); g.lineTo(x,y+r); g.quadraticCurveTo(x,y,x+r,y); g.closePath(); }
+function textSprite(text,bg,fg,mmPerPx=.55){
+  const cv=document.createElement('canvas'), g=cv.getContext('2d'), fs=34, pad=12;
+  g.font=`600 ${fs}px "Barlow Semi Condensed", sans-serif`; const w=Math.ceil(g.measureText(text).width)+pad*2;
+  cv.width=w; cv.height=fs+pad*1.4; g.font=`600 ${fs}px "Barlow Semi Condensed", sans-serif`;
+  g.fillStyle=bg; rr(g,0,0,cv.width,cv.height,8); g.fill();
+  g.fillStyle=fg; g.textBaseline='middle'; g.fillText(text,pad,cv.height/2+1);
+  const t=new THREE.CanvasTexture(cv); t.minFilter=THREE.LinearFilter;
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:t,depthTest:false,transparent:true}));
+  s.scale.set(cv.width*mmPerPx,cv.height*mmPerPx,1); s.renderOrder=30; root.add(s); return s;
+}
+function plateTexture(it){
+  const s=2.2, cv=document.createElement('canvas'), hmm=Math.max(it.h*U-.8,10);
+  cv.width=Math.round(PANEL_W*s); cv.height=Math.round(hmm*s);
+  const g=cv.getContext('2d'); g.fillStyle=it.color; g.fillRect(0,0,cv.width,cv.height);
+  const ear=21*s; g.fillStyle='rgba(0,0,0,.18)'; g.fillRect(0,0,ear,cv.height); g.fillRect(cv.width-ear,0,ear,cv.height);
+  g.fillStyle='rgba(0,0,0,.5)';
+  for(let k=0;k<it.h;k++) for(const off of [6.35,22.225,38.1]){ const y=cv.height-(k*U+off)*s; [ear/2,cv.width-ear/2].forEach(x=>g.fillRect(x-3*s,y-3*s,6*s,6*s)); }
+  g.strokeStyle='rgba(0,0,0,.25)'; g.lineWidth=2; g.strokeRect(1,1,cv.width-2,cv.height-2);
+  if(T.labels){
+    const fg = lum(it.color)>.5 ? '#101418' : '#ffffff', fs=Math.min(cv.height*.48,15*s);
+    g.fillStyle=fg; g.textBaseline='middle';
+    g.font=`500 ${fs*.8}px "IBM Plex Mono", monospace`; g.textAlign='right'; g.fillText(uRange(it),cv.width-ear-8*s,cv.height/2);
+    const rw=g.measureText(uRange(it)).width;
+    g.font=`600 ${fs}px "Barlow Semi Condensed", sans-serif`; g.textAlign='left'; g.fillText(it.label||'',ear+9*s,cv.height/2,cv.width-2*ear-rw-30*s);
+  }
+  const t=new THREE.CanvasTexture(cv); t.anisotropy=4; return t;
+}
+function uStrip(color){
+  const c=S.cab, H=c.rackU*U, s=Math.min(2,3800/H), cv=document.createElement('canvas'); cv.width=Math.round(30*s); cv.height=Math.round(H*s);
+  const g=cv.getContext('2d'); g.fillStyle=color; g.textAlign='center'; g.textBaseline='middle';
+  g.font=`500 ${Math.round(13*s)}px "IBM Plex Mono", monospace`;
+  for(let u=1;u<=c.rackU;u++){ const y=cv.height-(u-.5)*U*s; g.globalAlpha=1; g.fillText(String(u),cv.width/2,y); g.globalAlpha=.4; g.fillRect(4*s,cv.height-u*U*s,cv.width-8*s,1); }
+  const t=new THREE.CanvasTexture(cv); t.anisotropy=4;
+  const I=inner(), cx=I.W/2;
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(30,H),new THREE.MeshBasicMaterial({map:t,transparent:true,depthWrite:false}));
+  m.position.set(cx-PANEL_W/2-18-I.W/2, c.rackBase+H/2, -(c.railFront-5)); root.add(m);
+}
+
+function clearRoot(){
+  root.traverse(o=>{ if(o.geometry) o.geometry.dispose(); if(o.material){ (Array.isArray(o.material)?o.material:[o.material]).forEach(m=>{ if(m.map) m.map.dispose(); m.dispose(); }); } });
+  scene.remove(root); root=new THREE.Group(); scene.add(root); pickables=[];
+}
+
+function build(){
+  if(!renderer) return;
+  clearRoot();
+  const col={scene:css('--scene'),grid:css('--grid'),shell:css('--shell'),edge:css('--shell-edge'),rail:css('--rail'),plinth:css('--plinth'),ups:css('--ups'),err:css('--err'),warn:css('--warn'),accent:css('--accent'),fg:css('--fg'),raise:css('--raise')};
+  scene.background=new THREE.Color(col.scene);
+  const I=inner(), c=S.cab, sd=c.side, fl=c.floor, rf=c.roof, dr=c.door, rr_=c.rear;
+  if(I.W<=0||I.H<=0||I.D<=0) return;
+  const shellCol = c.shell || col.shell;
+
+  const grid=new THREE.GridHelper(6000,60,col.grid,col.grid); grid.position.set(0,-fl-c.plinth,-I.D/2); grid.material.transparent=true; grid.material.opacity=.6; root.add(grid);
+  edgeBox(B(-sd,I.W+sd,-fl,I.H+rf,-dr,I.D+rr_),col.edge,.9);
+  if(c.plinth>0){
+    const pb=B(-sd+15,I.W+sd-15,-fl-c.plinth,-fl,-dr+15,I.D+rr_-15);
+    boxMesh(pb,std(col.plinth)); edgeBox(pb,col.edge,.6);
+  }
+  if(c.hood>0){
+    const hs=c.hoodSide||0, hf=c.hoodFront||0, y0=I.H+rf;
+    const g=new THREE.BufferGeometry(), x0=-sd-hs-I.W/2, x1=I.W+sd+hs-I.W/2, zf=dr+hf, zb=-(I.D+rr_);
+    const lip=Math.min(30,c.hood*.35), yF=y0+lip, yB=y0+c.hood;   // angled rain hood: low at front, high at rear
+    const v=[x0,y0,zf, x1,y0,zf, x1,y0,zb, x0,y0,zb, x0,yF,zf, x1,yF,zf, x1,yB,zb, x0,yB,zb];
+    const idx=[0,1,5,0,5,4, 1,2,6,1,6,5, 2,3,7,2,7,6, 3,0,4,3,4,7, 4,5,6,4,6,7, 0,3,2,0,2,1];
+    g.setAttribute('position',new THREE.Float32BufferAttribute(v,3)); g.setIndex(idx); g.computeVertexNormals();
+    const hm=new THREE.Mesh(g,std(shellCol,{side:THREE.DoubleSide,transparent:!T.walls,opacity:T.walls?1:.25})); root.add(hm);
+    const he=new THREE.LineSegments(new THREE.EdgesGeometry(g),new THREE.LineBasicMaterial({color:col.edge})); root.add(he);
+  }
+
+  const wallMat=new THREE.MeshStandardMaterial({color:shellCol,transparent:true,opacity:.2,depthWrite:false,side:THREE.DoubleSide});
+  boxMesh(B(-sd,I.W+sd,-fl,0,0,I.D),std(shellCol,{transparent:true,opacity:.55,depthWrite:false}));
+  if(T.walls){ [B(-sd,0,0,I.H,0,I.D),B(I.W,I.W+sd,0,I.H,0,I.D),B(-sd,I.W+sd,-fl,I.H+rf,I.D,I.D+rr_),B(-sd,I.W+sd,I.H,I.H+rf,0,I.D)].forEach(b=>boxMesh(b,wallMat)); }
+  edgeBox(B(0,I.W,0,I.H,0,I.D),col.edge,.35);
+  if(T.door){
+    boxMesh(B(-sd,I.W+sd,-fl,I.H+rf,-dr,0),new THREE.MeshStandardMaterial({color:shellCol,transparent:true,opacity:.14,depthWrite:false,side:THREE.DoubleSide}));
+    boxMesh(B(I.W-60,I.W-35,I.H*.45,I.H*.45+180,-dr-30,-dr),std(col.rail,{metalness:.5}));
+  }
+
+  rails().forEach(r=>boxMesh(r.box,std(col.rail,{metalness:.45,roughness:.45})));
+  if(T.labels) uStrip(col.fg);
+
+  if(S.ups.enabled){
+    const zb=upsBox();
+    boxMesh(zb,new THREE.MeshBasicMaterial({color:col.ups,transparent:true,opacity:.09,depthWrite:false}));
+    edgeBox(zb,col.ups,.9);
+    if(T.labels){ const sp=textSprite(`UPS SPACE  U${S.ups.startU}–${S.ups.startU+S.ups.heightU-1}`,col.ups,'#ffffff',.5); const tw=toWorld(zb); sp.position.set(tw.cx+tw.sx/2+sp.scale.x/2+20,tw.cy,tw.cz+tw.sz/2); }
+  }
+
+  S.items.forEach(it=>{
+    const b=itemBoxes(it), bad=badIds.get(it.id), isSel=sel&&sel.kind==='item'&&sel.id===it.id;
+    const emissive = bad==='err' ? 0x7a1010 : bad==='warn' ? 0x4a3000 : 0x000000;
+    const side=std(it.color,{emissive}), front=std(0xffffff,{map:plateTexture(it),emissive});
+    const mats=[side,side,side,side,side,side]; mats[it.mount==='rear'?5:4]=front;
+    const plate=boxMesh(b.plate,mats);
+    const body=boxMesh(b.body,std(new THREE.Color(it.color).multiplyScalar(.62),{emissive,metalness:.25}));
+    edgeBox(b.body,0x000000,.25);
+    plate.userData=body.userData={kind:'item',id:it.id}; pickables.push(plate,body);
+    if(T.cables && b.cable){ boxMesh(b.cable,new THREE.MeshBasicMaterial({color:it.color,transparent:true,opacity:.1,depthWrite:false})); edgeBox(b.cable,it.color,.45); }
+    if(isSel) edgeBox(grow(B(b.plate.x0,b.plate.x1,b.plate.y0,b.plate.y1,Math.min(b.plate.z0,b.body.z0),Math.max(b.plate.z1,b.body.z1)),3),col.accent,1,true);
+  });
+
+  S.fixtures.forEach(f=>{
+    const fb=fixtureBox(f), bad=badIds.get(f.id), isSel=sel&&sel.kind==='fix'&&sel.id===f.id;
+    const m=boxMesh(fb,std(f.color,{emissive: bad==='err'?0x6a1010:0x000000}));
+    m.userData={kind:'fix',id:f.id}; pickables.push(m);
+    edgeBox(fb,0x000000,.35);
+    if(T.clear && f.clearance>0){ const eb=grow(fb,f.clearance); boxMesh(eb,new THREE.MeshBasicMaterial({color:f.color,transparent:true,opacity:.07,depthWrite:false})); edgeBox(eb,f.color,.5); }
+    if(isSel) edgeBox(grow(fb,4),col.accent,1,true);
+    if(T.labels){ const sp=textSprite(`${f.name}  ${fmt(f.w)}×${fmt(f.h)}×${fmt(f.d)}`,f.color,lum(f.color)>.5?'#101418':'#ffffff',.5); const tw=toWorld(fb); sp.position.set(tw.cx,fb.y1+sp.scale.y/2+12,tw.cz); }
+  });
+
+  conflicts.forEach(cf=>{ if(!cf.box) return;
+    const m=boxMesh(grow(cf.box,1.5),new THREE.MeshBasicMaterial({color:cf.sev==='err'?col.err:col.warn,transparent:true,opacity:.42,depthTest:false,depthWrite:false})); m.renderOrder=15;
+    edgeBox(grow(cf.box,1.5),cf.sev==='err'?col.err:col.warn,1,true);
+  });
+}
+
+function cabCenter(){ const I=inner(), c=S.cab; return new THREE.Vector3(0,(-c.floor-c.plinth+I.H+c.roof+c.hood)/2,-(I.D+c.rear-c.door)/2); }
+function fitOrtho(){
+  const r=vp.getBoundingClientRect(), a=Math.max(r.width,1)/Math.max(r.height,1), c=S.cab;
+  const span = view==='front' ? Math.max(c.W/a, overallH()) : view==='side' ? Math.max(c.D/a, overallH()) : Math.max(c.W/a,c.D);
+  const half=span*.62;
+  ortho.left=-half*a; ortho.right=half*a; ortho.top=half; ortho.bottom=-half; ortho.updateProjectionMatrix();
+}
+function resize(){
+  if(!renderer) return;
+  const r=vp.getBoundingClientRect(), w=Math.max(r.width,1), h=Math.max(r.height,1);
+  renderer.setSize(w,h,false); persp.aspect=w/h; persp.updateProjectionMatrix(); fitOrtho();
+}
+function setView(v){
+  view=v; if(!renderer) return;
+  const c=S.cab, t=cabCenter(), R=Math.max(c.W,overallH(),c.D);
+  if(controls) controls.dispose();
+  if(v==='3d'){ cam=persp; cam.up.set(0,1,0); cam.position.set(t.x+R*1.15, t.y+R*.7, t.z+R*1.85); }
+  else{
+    cam=ortho; ortho.zoom=1;
+    if(v==='front'){ cam.up.set(0,1,0); cam.position.set(t.x,t.y,t.z+R*4); }
+    if(v==='side'){ cam.up.set(0,1,0); cam.position.set(t.x+R*4,t.y,t.z); }
+    if(v==='top'){ cam.up.set(0,0,-1); cam.position.set(t.x,t.y+R*4,t.z); }
+    fitOrtho(); ortho.updateProjectionMatrix();
+  }
+  controls=new THREE.OrbitControls(cam,canvas);
+  controls.target.copy(t); controls.enableDamping=true; controls.dampingFactor=.12; controls.screenSpacePanning=true;
+  controls.enableRotate = v==='3d';
+  controls.update();
+  document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('on',b.dataset.view===v));
+}
+function loop(){ requestAnimationFrame(loop); if(controls) controls.update(); renderer.render(scene,cam); }
+
+/* ---------- picking & dragging ---------- */
+const ray=new THREE.Raycaster(), ndc=new THREE.Vector2();
+let drag=null, down=null;
+function hitAt(e){ const r=canvas.getBoundingClientRect(); ndc.set(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1); ray.setFromCamera(ndc,cam); return ray.intersectObjects(pickables,false)[0]; }
+function planePoint(e,plane){ const r=canvas.getBoundingClientRect(); ndc.set(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1); ray.setFromCamera(ndc,cam); const p=new THREE.Vector3(); return ray.ray.intersectPlane(plane,p)?p:null; }
+canvas.addEventListener('pointerdown',e=>{
+  if(!renderer || e.button!==0) return;
+  down={x:e.clientX,y:e.clientY};
+  const h=hitAt(e); if(!h) return;
+  const ud=h.object.userData, obj=ud.kind==='item'?S.items.find(i=>i.id===ud.id):S.fixtures.find(f=>f.id===ud.id);
+  if(!obj) return;
+  select(ud.kind,ud.id);
+  const n=new THREE.Vector3(); cam.getWorldDirection(n);
+  let normal=n.clone().negate();
+  if(ud.kind==='fix'){
+    // drag a fixture across the axis-aligned plane that faces the camera most; hold Shift to use the next one
+    const ax=[['x',Math.abs(n.x)],['y',Math.abs(n.y)],['z',Math.abs(n.z)]].sort((a,b)=>b[1]-a[1]);
+    const pickAx = e.shiftKey ? ax[1][0] : ax[0][0];
+    normal=new THREE.Vector3(pickAx==='x'?1:0,pickAx==='y'?1:0,pickAx==='z'?1:0);
+  }
+  drag={kind:ud.kind,obj,plane:new THREE.Plane().setFromNormalAndCoplanarPoint(normal,h.point),start:h.point.clone(),orig:clone(obj)};
+  if(controls) controls.enabled=false;
+  try{ canvas.setPointerCapture(e.pointerId); }catch(_){}
+},{capture:true});
+canvas.addEventListener('pointermove',e=>{
+  if(!drag) return;
+  const p=planePoint(e,drag.plane); if(!p) return;
+  const d=p.sub(drag.start), o=drag.obj, g=drag.orig; let changed=false;
+  if(drag.kind==='item'){
+    const nu=Math.max(1,Math.min(S.cab.rackU-o.h+1,g.u+Math.round(d.y/U)));
+    if(nu!==o.u){ o.u=nu; changed=true; }
+  } else {
+    const r5=v=>Math.round(v/5)*5;
+    const nx=r5(g.x+d.x), ny=r5(g.y+d.y), nz=r5(g.z-d.z);
+    if(nx!==o.x||ny!==o.y||nz!==o.z){ o.x=nx; o.y=ny; o.z=nz; changed=true; }
+  }
+  if(changed){ update(); syncEditor(); }
+});
+function endDrag(e){
+  if(drag){ drag=null; if(controls) controls.enabled=true; }
+  else if(down && e && Math.hypot(e.clientX-down.x,e.clientY-down.y)<4 && e.target===canvas && !hitAt(e)) select(null);
+  down=null;
+}
+canvas.addEventListener('pointerup',endDrag);
+canvas.addEventListener('pointercancel',()=>{ drag=null; down=null; if(controls) controls.enabled=true; });
+
+document.addEventListener('keydown',e=>{
+  if(!sel || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+  const it=selected(); if(!it) return; let used=true;
+  if(sel.kind==='item'){
+    if(e.key==='ArrowUp') it.u=Math.min(S.cab.rackU-it.h+1,it.u+1);
+    else if(e.key==='ArrowDown') it.u=Math.max(1,it.u-1);
+    else if(e.key==='Delete') removeSel();
+    else used=false;
+  } else {
+    if(e.key==='ArrowUp') it.y+=10; else if(e.key==='ArrowDown') it.y-=10;
+    else if(e.key==='ArrowLeft') it.x-=10; else if(e.key==='ArrowRight') it.x+=10;
+    else if(e.key==='PageUp') it.z-=10; else if(e.key==='PageDown') it.z+=10;
+    else if(e.key==='Delete') removeSel(); else used=false;
+  }
+  if(used){ e.preventDefault(); if(e.key!=='Delete'){ update(); syncEditor(); } }
+});
+
+/* ---------- sidebar ---------- */
+const $=id=>document.getElementById(id);
+function el(tag,attrs={},...kids){ const n=document.createElement(tag); for(const k in attrs){ if(k==='class') n.className=attrs[k]; else if(k.startsWith('on')) n.addEventListener(k.slice(2),attrs[k]); else if(attrs[k]!==undefined&&attrs[k]!==null) n.setAttribute(k,attrs[k]); } kids.flat().forEach(k=>n.append(k)); return n; }
+function num(label,obj,key,{suffix='mm',step=1,min,id,wide,after}={}){
+  const inp=el('input',{type:'number',step,min,id,value:obj[key]});
+  inp.addEventListener('input',()=>{ const v=parseFloat(inp.value); if(isFinite(v)){ obj[key]=v; if(after) after(); update(); } });
+  return el('label',{class:'fld'+(wide?' wide':'')},el('span',{},label),el('div',{class:'in'},inp,suffix?el('em',{},suffix):''));
+}
+function txt(label,obj,key,id,after){ const inp=el('input',{type:'text',id,value:obj[key]||''}); inp.addEventListener('input',()=>{ obj[key]=inp.value; if(after) after(); update(); }); return el('label',{class:'fld wide'},el('span',{},label),el('div',{class:'in'},inp)); }
+function sel_(label,obj,key,opts,id,after){ const s=el('select',{id}); opts.forEach(([v,t])=>{ const o=el('option',{value:v},t); if(obj[key]===v) o.selected=true; s.append(o); }); s.addEventListener('change',()=>{ obj[key]=s.value; if(after) after(); update(); }); return el('label',{class:'fld'},el('span',{},label),el('div',{class:'in'},s)); }
+function colour(label,obj,key,id){ const inp=el('input',{type:'color',id,value:obj[key]}); inp.addEventListener('input',()=>{ obj[key]=inp.value; update(); }); return el('label',{class:'fld'},el('span',{},label),el('div',{class:'in'},inp)); }
+
+let pick = {family:S.cab.family||'outdoor', code:S.cab.model||''};
+function renderCab(){
+  const c=S.cab, b=$('cabBody');
+  const list=CATALOGUE[pick.family];
+  if(!list.some(p=>p.code===pick.code)) pick.code = list[0] ? list[0].code : '';
+  const preset=list.find(p=>p.code===pick.code);
+
+  const seg=el('div',{class:'seg',role:'group','aria-label':'Cabinet type'},
+    ...['outdoor','indoor'].map(f=>el('button',{class:pick.family===f?'on':'',onclick:()=>{ pick.family=f; pick.code=''; renderCab(); }},f==='outdoor'?'Outdoor':'Indoor')));
+  const msel=el('select',{id:'cab-model'}); list.forEach(p=>{ const o=el('option',{value:p.code},p.title); if(p.code===pick.code) o.selected=true; msel.append(o); });
+  msel.addEventListener('change',()=>{ pick.code=msel.value; renderCab(); });
+  const fin=el('select',{id:'cab-shell'}); SHELL_OPTIONS[c.family||'outdoor'].forEach(([n,v])=>{ const o=el('option',{value:v},n); if(c.shell===v) o.selected=true; fin.append(o); });
+  fin.addEventListener('change',()=>{ c.shell=fin.value; update(); });
+
+  const apply=(withSample)=>{
+    if(!preset) return;
+    const cab=clone(preset.cab);
+    const keepShell=SHELL_OPTIONS[cab.family].some(([,v])=>v===c.shell); if(keepShell) cab.shell=c.shell;
+    if(withSample){ const s=fromPreset(preset); s.cab=cab; s.sheet=S.sheet||s.sheet; S=s; }
+    else { S.cab=cab; if(S.ups.startU+S.ups.heightU-1>cab.rackU) S.ups.enabled=false; }
+    sel=null; renderCab(); renderUps(); renderEditor(); update(); setView(view);
+    flash(`${cab.name} loaded${withSample?' with a sample fit-out':''}.`);
+  };
+
+  b.replaceChildren(
+    el('div',{class:'picker'},
+      seg,
+      el('label',{class:'fld'},el('span',{},pick.family==='outdoor'?'Dynamix ROD outdoor freestanding, IP45':'Dynamix D-Series swing-frame wall mount'),el('div',{class:'in'},msel)),
+      preset && preset.note ? el('p',{class:'note warnnote'},preset.note) : '',
+      el('div',{class:'btns'},
+        el('button',{class:'btn primary',onclick:()=>apply(true)},'Load with sample fit-out'),
+        el('button',{class:'btn',onclick:()=>apply(false)},'Swap cabinet, keep equipment'))
+    ),
+    el('div',{class:'grid2'},
+      txt('Cabinet name',c,'name','cab-name'),
+      el('label',{class:'fld'},el('span',{},'Finish'),el('div',{class:'in'},fin)),
+      num('Rack size',c,'rackU',{suffix:'U',min:1,id:'cab-rackU'})
+    ),
+    el('details',{class:'sub-dims'},
+      el('summary',{},'Dimensions'),
+      el('div',{class:'grid2'},
+        num('Body width',c,'W',{id:'cab-W'}), num('Body depth',c,'D',{id:'cab-D'}),
+        num('Body height (excl. plinth & hood)',c,'H',{id:'cab-H',wide:true}),
+        num('Plinth height',c,'plinth',{id:'cab-plinth'}), num('Rain hood height',c,'hood',{id:'cab-hood'}),
+        num('Side wall each',c,'side',{id:'cab-side'}), num('Door',c,'door',{id:'cab-door'}),
+        num('Rear wall',c,'rear',{id:'cab-rear'}), num('Floor / gland plate',c,'floor',{id:'cab-floor'}),
+        num('Roof',c,'roof',{id:'cab-roof'}), num('First U above floor',c,'rackBase',{id:'cab-base'}),
+        num('Door to front rail',c,'railFront',{id:'cab-rf'}), num('Front to rear rail',c,'mountDepth',{id:'cab-md'})
+      ),
+      el('p',{class:'note'},'Wall, door, roof and floor thicknesses set the interior space. Rails on both ranges are adjustable, so change the rail positions to match your install.')
+    ),
+    el('div',{class:'readout',id:'cabReadout'})
+  );
+  renderAccessories();
+}
+function renderUps(){
+  const u=S.ups, b=$('upsBody');
+  const cb=el('input',{type:'checkbox',id:'ups-on'}); cb.checked=u.enabled; cb.addEventListener('change',()=>{ u.enabled=cb.checked; update(); });
+  b.replaceChildren(el('label',{class:'check'},cb,'Reserve rack space for the UPS'),
+    el('div',{class:'grid2'}, num('Lowest U',u,'startU',{suffix:'U',min:1,id:'ups-s'}), num('Height',u,'heightU',{suffix:'U',min:1,id:'ups-h'}), num('Usable depth from front rail',u,'depth',{id:'ups-d',wide:true})),
+    el('p',{class:'note'},'Only items set to "UPS / battery" may sit in this space. Anything else placed there is flagged.'));
+}
+function renderLists(){
+  const il=$('itemList'); il.replaceChildren();
+  const items=[...S.items].sort((a,b)=>uTop(b)-uTop(a));
+  if(!items.length) il.append(el('div',{class:'empty'},'No equipment yet. Add a 1U, 2U or larger placeholder above.'));
+  items.forEach(it=>{ const bad=badIds.get(it.id);
+    il.append(el('button',{class:'row'+(sel&&sel.id===it.id?' sel':''),onclick:()=>select('item',it.id)},
+      el('i',{class:'sw',style:`background:${it.color}`}), el('span',{class:'nm'},it.label||'Unnamed item'), el('span',{class:'u'},uRange(it)), el('i',{class:'dot '+(bad||'')}))); });
+  const fl=$('fixList'); fl.replaceChildren();
+  if(!S.fixtures.length) fl.append(el('div',{class:'empty'},'No fixtures. Add the access control panel or other wall-mounted gear.'));
+  S.fixtures.forEach(f=>{ const bad=badIds.get(f.id);
+    fl.append(el('button',{class:'row'+(sel&&sel.id===f.id?' sel':''),onclick:()=>select('fix',f.id)},
+      el('i',{class:'sw',style:`background:${f.color}`}), el('span',{class:'nm'},f.name||'Fixture'), el('span',{class:'u'},fixtureWhere(f)), el('i',{class:'dot '+(bad||'')}))); });
+  const used=S.items.reduce((s,i)=>s+i.h,0);
+  $('itemCount').textContent=`${used} / ${S.cab.rackU}U used`;
+  $('fixCount').textContent=S.fixtures.length?String(S.fixtures.length):'';
+  $('upsCount').textContent=S.ups.enabled?`U${S.ups.startU}–${S.ups.startU+S.ups.heightU-1}`:'off';
+  const I=inner();
+  $('cabCount').textContent=`${S.cab.rackU}U`;
+  $('cabTitle').textContent=S.cab.name||"Data Cabinet Planner";
+  $('cabSub').textContent=`${S.cab.family==='indoor'?'Indoor':'Outdoor'} · ${fmt(S.cab.W)} W × ${fmt(S.cab.D)} D × ${fmt(overallH())} H mm overall`;
+  const ro=$('cabReadout'); if(ro) ro.textContent=`Interior ${fmt(I.W)} W × ${fmt(I.H)} H × ${fmt(I.D)} D mm\nRack ${S.cab.rackU}U = ${fmt(S.cab.rackU*U)} mm · ${fmt(I.H-S.cab.rackBase-S.cab.rackU*U)} mm free above\nFront rail ${fmt(S.cab.railFront)} mm behind door · rear rail ${fmt(I.D-rearRail())} mm from back`;
+  if(ro) ro.style.whiteSpace='pre-line';
+}
+const MOUNT_SHORT={door:'Door',left:'Left wall',right:'Right wall',rear:'Rear wall'};
+
+function selected(){ if(!sel) return null; return sel.kind==='item'?S.items.find(i=>i.id===sel.id):S.fixtures.find(f=>f.id===sel.id); }
+function renderEditor(){
+  const ie=$('itemEditor'), fe=$('fixEditor'); ie.replaceChildren(); fe.replaceChildren();
+  const o=selected(); if(!o) return;
+  if(sel.kind==='item'){
+    const nud=(d)=>()=>{ o.u=Math.max(1,Math.min(S.cab.rackU-o.h+1,o.u+d)); update(); syncEditor(); };
+    ie.append(el('div',{class:'editor'},
+      el('h3',{},'Edit placeholder'),
+      el('div',{class:'grid2'},
+        txt('Label',o,'label','it-label'),
+        sel_('Type',o,'type',[['device','Network device'],['passive','Patch / fibre panel'],['cable','Cable management'],['shelf','Shelf'],['ups','UPS / battery'],['blank','Blank / PDU / other']],'it-type',()=>{ o.color=TYPE_COL[o.type]; syncEditor(); }),
+        sel_('Mounted on',o,'mount',[['front','Front rails'],['rear','Rear rails']],'it-mount'),
+        num('Lowest U',o,'u',{suffix:'U',min:1,id:'it-u'}), num('Height',o,'h',{suffix:'U',min:1,id:'it-h'}),
+        num('Depth behind rail',o,'depth',{id:'it-depth'}), num('Cable space in front',o,'cable',{id:'it-cable'}),
+        colour('Colour',o,'color','it-color'),
+        el('div',{class:'fld'},el('span',{},'Move'),el('div',{class:'nudge'},el('button',{class:'btn',onclick:nud(1),'aria-label':'Move up 1U'},'▲ Up'),el('button',{class:'btn',onclick:nud(-1),'aria-label':'Move down 1U'},'▼ Down')))
+      ),
+      el('div',{class:'btns'},el('button',{class:'btn',onclick:dupSel},'Duplicate'),el('button',{class:'btn danger',onclick:removeSel},'Delete'))
+    ));
+  } else {
+    const axis=(label,key,id,minusTxt,plusTxt)=>{
+      const f=num(label,o,key,{id});
+      const step=d=>()=>{ o[key]=Math.round((o[key]+d)*10)/10; update(); syncEditor(); };
+      f.querySelector('.in').append(
+        el('button',{class:'ax',type:'button',onclick:step(-10),'aria-label':`${label} −10 mm`,title:minusTxt},'−'),
+        el('button',{class:'ax',type:'button',onclick:step(10),'aria-label':`${label} +10 mm`,title:plusTxt},'+'));
+      return f;
+    };
+    const snap=(w,t)=>el('button',{class:'btn',type:'button',onclick:()=>{ snapFixture(o,w); update(); renderEditor(); }},t);
+    fe.append(el('div',{class:'editor'},
+      el('h3',{},'Edit panel / fixture'),
+      el('div',{class:'grid2'},
+        txt('Name',o,'name','fx-name'),
+        sel_('Faces',o,'orient',[['front','Front / back (door, rear)'],['side','Sideways (side walls)']],'fx-orient',()=>{ renderEditor(); }),
+        colour('Colour',o,'color','fx-color'),
+        num('Width',o,'w',{id:'fx-w'}), num('Height',o,'h',{id:'fx-h'}),
+        num('Depth (sticks out)',o,'d',{id:'fx-d'}), num('Required clearance',o,'clearance',{id:'fx-c'}),
+        axis('X · from left wall','x','fx-x','Move left','Move right'),
+        axis('Y · above floor','y','fx-y','Move down','Move up'),
+        axis('Z · back from door','z','fx-z','Move toward door','Move toward rear')
+      ),
+      el('div',{class:'fld'},el('span',{},'Snap to'),el('div',{class:'btns'},snap('door','Door'),snap('left','Left wall'),snap('right','Right wall'),snap('rear','Rear wall'))),
+      el('p',{class:'note'},'Positions are to the corner nearest the left wall, floor and door, measured from the inside faces. Drag it in the 3D view (hold Shift to drag on the other plane), or use the arrow keys and Page Up / Page Down.'),
+      el('div',{class:'btns'},el('button',{class:'btn',onclick:dupSel},'Duplicate'),el('button',{class:'btn danger',onclick:removeSel},'Delete'))
+    ));
+  }
+}
+function syncEditor(){ const o=selected(); if(!o) return;
+  const map = sel.kind==='item' ? {'it-u':'u','it-h':'h','it-color':'color','it-type':'type'} : {'fx-x':'x','fx-y':'y','fx-z':'z','fx-orient':'orient'};
+  for(const id in map){ const n=$(id); if(n && document.activeElement!==n) n.value=o[map[id]]; } }
+
+function select(kind,id){ sel=kind?{kind,id}:null; renderEditor(); update(); }
+
+let lastDeleted=null, toastTimer=null;
+function removeSel(){
+  const o=selected(); if(!o) return;
+  const arr = sel.kind==='item'?S.items:S.fixtures, idx=arr.indexOf(o);
+  arr.splice(idx,1); lastDeleted={kind:sel.kind,obj:o,idx};
+  sel=null; renderEditor(); update();
+  $('toastMsg').textContent=`Deleted ${o.label||o.name}`; $('toast').hidden=false;
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>$('toast').hidden=true,6000);
+}
+$('toastUndo').onclick=()=>{ if(!lastDeleted) return; const arr=lastDeleted.kind==='item'?S.items:S.fixtures; arr.splice(lastDeleted.idx,0,lastDeleted.obj); select(lastDeleted.kind,lastDeleted.obj.id); lastDeleted=null; $('toast').hidden=true; };
+function dupSel(){
+  const o=selected(); if(!o) return; const n=clone(o); n.id=uid();
+  if(sel.kind==='item'){ n.label=o.label+' (copy)'; n.u=findFree(n.h,n.type); S.items.push(n); select('item',n.id); }
+  else { n.name=o.name+' (copy)'; n.y+=o.h+20; S.fixtures.push(n); select('fix',n.id); }
+}
+function findFree(h,type){
+  const r=S.cab.rackU, z=S.ups.enabled?[S.ups.startU,S.ups.startU+S.ups.heightU-1]:null;
+  const occ=u=>S.items.some(it=>u>=it.u&&u<=uTop(it)), inZ=u=>z&&u>=z[0]&&u<=z[1];
+  const ok=s=>{ for(let u=s;u<s+h;u++){ if(u<1||u>r||occ(u)) return false; if(type==='ups' ? (z&&!inZ(u)) : inZ(u)) return false; } return true; };
+  if(type==='ups'){ for(let s=1;s<=r-h+1;s++) if(ok(s)) return s; }
+  else for(let s=r-h+1;s>=1;s--) if(ok(s)) return s;
+  return Math.max(1,r-h+1);
+}
+document.querySelectorAll('[data-add]').forEach(b=>b.addEventListener('click',()=>{
+  const ups=b.dataset.add==='ups', h=ups?2:+b.dataset.add, type=ups?'ups':'device';
+  const n={id:uid(),label:ups?'UPS unit':`${h}U device`,type,u:findFree(h,type),h,depth:ups?600:350,mount:'front',cable:ups?0:60,color:TYPE_COL[type]};
+  S.items.push(n); select('item',n.id); $('it-label')&&$('it-label').select();
+}));
+/* ---------- accessories ---------- */
+const ACCESSORIES = [
+  {group:'Cable management', items:[
+    {name:'1U brush cable manager', type:'cable', h:1, depth:60, cable:60},
+    {name:'1U D-ring cable manager', type:'cable', h:1, depth:90, cable:90},
+    {name:'2U D-ring cable manager', type:'cable', h:2, depth:90, cable:90},
+    {name:'Rear cable lacing bar', type:'cable', h:1, depth:60, cable:0, mount:'rear'},
+    {name:'Vertical cable manager, left', vertical:'left'},
+    {name:'Vertical cable manager, right', vertical:'right'}
+  ]},
+  {group:'Shelves', items:[
+    {name:'Fixed shelf RODFS-400', type:'shelf', h:1, depth:230, family:'outdoor', tag:'230 deep'},
+    {name:'Fixed shelf RODFS-600', type:'shelf', h:1, depth:350, family:'outdoor', tag:'350 deep'},
+    {name:'Fixed shelf (supplied)', type:'shelf', h:1, depth:'full', family:'indoor'},
+    {name:'Cantilever shelf 1U', type:'shelf', h:1, depth:250},
+    {name:'Cantilever shelf 2U', type:'shelf', h:2, depth:350},
+    {name:'Sliding shelf 1U', type:'shelf', h:1, depth:'full'}
+  ]},
+  {group:'Power & blanking', items:[
+    {name:'1U PDU, 8-way', type:'blank', h:1, depth:60, cable:40, color:'#8a5a3b'},
+    {name:'1U fan tray', type:'blank', h:1, depth:300, cable:0, color:'#55606b'},
+    {name:'1U blanking panel', type:'blank', h:1, depth:15, cable:0},
+    {name:'2U blanking panel', type:'blank', h:2, depth:15, cable:0}
+  ]}
+];
+function accDepth(a){ const room=inner().D-S.cab.railFront-10; return a.depth==='full' ? Math.max(100,Math.min(room,S.cab.mountDepth+20)) : Math.min(a.depth,room); }
+function addAccessory(a){
+  if(a.vertical){
+    const I=inner(), c=S.cab, gap=I.W/2-PANEL_W/2, w=Math.max(10,Math.min(80,Math.round(gap-6)));
+    const x = a.vertical==='left' ? Math.round(gap-w-2) : Math.round(I.W-gap+2);
+    const n={id:uid(),name:a.name,orient:'front',w,h:Math.round(c.rackU*U),d:Math.min(150,Math.round(I.D-Math.max(0,c.railFront-60))),x,y:c.rackBase,z:Math.max(0,Math.round(c.railFront-60)),clearance:0,color:TYPE_COL.cable};
+    S.fixtures.push(n); select('fix',n.id);
+    if(gap<20) flash(`Only ${fmt(gap)} mm beside the rails here, so a vertical cable manager will not fit.`);
+    return;
+  }
+  const n={id:uid(),label:a.name,type:a.type,u:findFree(a.h,a.type),h:a.h,depth:accDepth(a),mount:a.mount||'front',cable:a.cable||0,color:a.color||TYPE_COL[a.type]};
+  S.items.push(n); select('item',n.id);
+}
+function renderAccessories(){
+  const fam=S.cab.family||'outdoor', body=$('accBody'); body.replaceChildren();
+  ACCESSORIES.forEach(g=>{
+    const grid=el('div',{class:'acc'});
+    g.items.filter(a=>!a.family||a.family===fam).forEach(a=>{
+      const tag = a.vertical ? 'beside rails' : `${a.h}U · ${a.tag || (a.depth==='full'?'full depth':a.depth+' deep')}${a.mount==='rear'?' · rear':''}`;
+      grid.append(el('button',{class:'btn',type:'button',onclick:()=>addAccessory(a)},el('span',{},a.name),el('small',{},tag)));
+    });
+    body.append(el('div',{class:'accgrp'},el('h4',{},g.group),grid));
+  });
+  body.append(el('p',{class:'note'},'Rack accessories appear in the equipment list. Vertical cable managers are placed as fixtures beside the rails.'));
+}
+
+$('addFix').onclick=()=>{ const I=inner(); const n={id:uid(),name:'New panel',orient:'side',w:200,h:250,d:80,x:0,y:200,z:Math.round(I.D/2-100),clearance:20,color:'#c98a3a'}; S.fixtures.push(n); select('fix',n.id); };
+
+/* ---------- conflict panel ---------- */
+function renderConflicts(){
+  const errs=conflicts.filter(c=>c.sev==='err').length, warns=conflicts.length-errs, pill=$('cfPill');
+  pill.className='pill '+(errs?'err':warns?'warn':'ok');
+  pill.textContent = !conflicts.length ? 'No clashes' : [errs?`${errs} clash${errs>1?'es':''}`:'', warns?`${warns} warning${warns>1?'s':''}`:''].filter(Boolean).join(' · ');
+  const ul=$('cfList'); ul.replaceChildren();
+  conflicts.forEach(c=>ul.append(el('li',{class:c.sev,onclick:()=>{ const id=c.ids[0]; if(!id) return; select(S.items.some(i=>i.id===id)?'item':'fix',id); }},el('i'),el('span',{},c.msg))));
+}
+$('cfMin').onclick=()=>{ const cf=$('cf'); cf.classList.toggle('min'); $('cfMin').textContent=cf.classList.contains('min')?'Show':'Hide'; };
+async function copyText(text,okMsg,fallbackTarget){
+  try{ await navigator.clipboard.writeText(text); flash(okMsg); }
+  catch(e){ if(fallbackTarget){ fallbackTarget.value=text; fallbackTarget.focus(); fallbackTarget.select(); flash('Copy was blocked here. The text is selected below, so copy it with Ctrl+C.'); } }
+}
+function flash(msg){ $('ioMsg').textContent=msg; $('toastMsg').textContent=msg; $('toastUndo').hidden=true; $('toast').hidden=false; clearTimeout(toastTimer); toastTimer=setTimeout(()=>{ $('toast').hidden=true; $('toastUndo').hidden=false; },3500); }
+$('cfCopy').onclick=()=>{
+  const lines=[`${S.cab.name} — clash report`,`Cabinet ${S.cab.W}×${S.cab.H}×${S.cab.D} mm, ${S.cab.rackU}U`,''];
+  if(!conflicts.length) lines.push('No clashes found.'); conflicts.forEach(c=>lines.push(`${c.sev==='err'?'CLASH':'WARN '}  ${c.msg}`));
+  lines.push('','Rack (top down):'); [...S.items].sort((a,b)=>uTop(b)-uTop(a)).forEach(i=>lines.push(`  ${uRange(i).padEnd(8)} ${i.label} — ${i.depth} mm deep, ${i.mount} rails`));
+  S.fixtures.forEach(f=>lines.push(`  Fixture: ${f.name} ${f.w}×${f.h}×${f.d} mm (${fixtureWhere(f).toLowerCase()}), X ${fmt(f.x)} from left, Y ${fmt(f.y)} above floor, Z ${fmt(f.z)} from door`));
+  $('secCab').parentElement && copyText(lines.join('\n'),'Clash report copied.',$('importTxt'));
+};
+$('copyJson').onclick=()=>copyText(JSON.stringify(S,null,2),'Layout copied. Paste it into a .json file or a message to keep it.',$('importTxt'));
+function loadLayout(s){ if(!valid(s)) throw new Error('bad'); const keep=S.sheet; S=migrate(s); if(!(S.sheet&&S.sheet.logo) && keep) S.sheet=Object.assign({},S.sheet,{logo:keep.logo}); sel=null; pick={family:S.cab.family||'outdoor',code:S.cab.model||''}; renderCab(); renderUps(); renderEditor(); update(); setView(view); }
+$('importBtn').onclick=()=>{ try{ loadLayout(JSON.parse($('importTxt').value)); flash('Layout loaded.'); }catch(e){ $('ioMsg').textContent='That text is not a layout from this planner. Paste the full text copied with "Copy layout".'; } };
+$('importFile').onchange=e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ try{ loadLayout(JSON.parse(r.result)); flash(`Loaded ${f.name}.`); }catch(_){ $('ioMsg').textContent=`${f.name} is not a layout from this planner.`; } }; r.readAsText(f); e.target.value=''; };
+$('resetEx').onclick=()=>{ const ex=clone(EXAMPLE); ex.items.forEach(i=>i.id=uid()); ex.fixtures.forEach(f=>f.id=uid()); loadLayout(ex); flash('Example layout restored.'); };
+
+/* ---------- drawing sheet: A3 landscape, model in mm, third-angle elevations ---------- */
+const TYPE_NAME={device:'Network device',passive:'Patch / fibre panel',cable:'Cable management',shelf:'Shelf',ups:'UPS / battery',blank:'Blank / PDU / other'};
+function hexLum(h){ const m=/^#?([0-9a-f]{6})$/i.exec(h||''); if(!m) return .5; const n=parseInt(m[1],16); return (.2126*((n>>16)&255)+.7152*((n>>8)&255)+.0722*(n&255))/255; }
+function drawingSVG(){
+  const c=S.cab, I=inner(), PW=420, PH=297, M=10, F='Helvetica, Arial, sans-serif', DC='#3a4148', INK='#1d2227', sh=S.sheet||{};
+  const o=[]; const esc=s=>String(s).replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+  const r2=v=>Math.round(v*100)/100;
+  const tw=(s,sz)=>String(s).length*sz*.53;
+  const fit=(s,maxW,sz)=>{ s=String(s); if(tw(s,sz)<=maxW) return s; let n=Math.max(1,Math.floor(maxW/(sz*.53))-1); return s.slice(0,n)+'…'; };
+  const line=(x1,y1,x2,y2,st=INK,w=.25,dash='')=>o.push(`<line x1="${r2(x1)}" y1="${r2(y1)}" x2="${r2(x2)}" y2="${r2(y2)}" stroke="${st}" stroke-width="${w}"${dash?` stroke-dasharray="${dash}"`:''}/>`);
+  const rect=(x,y,w,h,{fill='none',st=INK,sw=.25,dash='',op=1}={})=>o.push(`<rect x="${r2(x)}" y="${r2(y)}" width="${r2(Math.max(w,.05))}" height="${r2(Math.max(h,.05))}" fill="${fill}"${op<1?` fill-opacity="${op}"`:''} stroke="${st}" stroke-width="${sw}"${dash?` stroke-dasharray="${dash}"`:''}/>`);
+  const poly=(pts,{fill='none',st=INK,sw=.25,op=1}={})=>o.push(`<polygon points="${pts.map(p=>r2(p[0])+','+r2(p[1])).join(' ')}" fill="${fill}"${op<1?` fill-opacity="${op}"`:''} stroke="${st}" stroke-width="${sw}"/>`);
+  const text=(x,y,s,{size=2.4,anchor='start',weight='normal',fill=INK,rot=0}={})=>o.push(`<text x="${r2(x)}" y="${r2(y)}" font-family="${F}" font-size="${size}" font-weight="${weight}" fill="${fill}" text-anchor="${anchor}"${rot?` transform="rotate(${rot} ${r2(x)} ${r2(y)})"`:''}>${esc(s)}</text>`);
+
+  /* extents and scale */
+  const hs=c.hood>0?(c.hoodSide||0):0, hf=c.hood>0?(c.hoodFront||0):0;
+  const xMin=-c.side-hs, xMax=I.W+c.side+hs, zMin=-c.door-hf, zMax=I.D+c.rear, yMin=-c.floor-c.plinth, yMax=I.H+c.roof+c.hood;
+  const Wm=xMax-xMin, Dm=zMax-zMin, Hm=yMax-yMin;
+  const fixF=S.fixtures.slice(0,4);
+  const nFixFront=fixF.length;
+  const bandTop=24, bandBot=196, dimB=(c.hood>0?18:12.5)+2, dimT=Math.max(4,nFixFront*5+2), titleH=8;
+  const dimLf=29, dimLs=12, dimRf=Math.max(5,nFixFront*5.5+3), dimRs=4, gapMin=6;
+  const availW=PW-2*M-(dimLf+dimRf)-2*(dimLs+dimRs)-4*gapMin, availH=bandBot-bandTop-dimB-dimT-titleH;
+  const dens=[1,2,5,10,15,20,25,30,40,50,75,100];
+  const den=dens.find(d=>(Wm+2*Dm)/d<=availW && Hm/d<=availH)||100, k=1/den;
+  const total=(dimLf+Wm*k+dimRf)+2*(dimLs+Dm*k+dimRs), gap=(PW-2*M-total)/4;
+  const oyTop=bandTop+dimT+(availH-Hm*k)/2;
+  const py=y=>oyTop+(yMax-y)*k;
+  let cur=M+gap;
+  const vL={name:'LEFT SIDE',note:'side panel removed',kind:'side',far:f=>fixtureBox(f).x0+fixtureBox(f).x1>I.W,ox:cur+dimLs}; vL.px=z=>vL.ox+(zMax-z)*k; cur+=dimLs+Dm*k+dimRs+gap;
+  const vF={name:'FRONT',note:'door removed',kind:'front',far:()=>false,ox:cur+dimLf}; vF.px=x=>vF.ox+(x-xMin)*k; cur+=dimLf+Wm*k+dimRf+gap;
+  const vR={name:'RIGHT SIDE',note:'side panel removed',kind:'side',far:f=>fixtureBox(f).x0+fixtureBox(f).x1<I.W,ox:cur+dimLs}; vR.px=z=>vR.ox+(z-zMin)*k;
+  const hb=(v,b)=>{ const a=v.kind==='front'?v.px(b.x0):v.px(b.z0), e=v.kind==='front'?v.px(b.x1):v.px(b.z1); return {x:Math.min(a,e),w:Math.abs(e-a),y:py(b.y1),h:(b.y1-b.y0)*k}; };
+  const mrect=(v,b,st)=>{ const p=hb(v,b); rect(p.x,p.y,p.w,p.h,st); return p; };
+
+  /* dimensions */
+  const arrowH=(x,y,dir)=>poly([[x,y],[x+dir*1.4,y-.42],[x+dir*1.4,y+.42]],{fill:DC,st:'none',sw:0});
+  const arrowV=(x,y,dir)=>poly([[x,y],[x-.42,y+dir*1.4],[x+.42,y+dir*1.4]],{fill:DC,st:'none',sw:0});
+  function dimH(xa,xb,yFrom,yLine,label){
+    if(xa>xb) [xa,xb]=[xb,xa]; if(xb-xa<.2) return;
+    const up=yLine<yFrom?-1:1;
+    line(xa,yFrom+up*.8,xa,yLine+up*1.2,DC,.13); line(xb,yFrom+up*.8,xb,yLine+up*1.2,DC,.13);
+    line(xa,yLine,xb,yLine,DC,.16); arrowH(xa,yLine,1); arrowH(xb,yLine,-1);
+    const sz=1.9, w=tw(label,sz);
+    if(w+1.5<xb-xa) text((xa+xb)/2,yLine-.6,label,{size:sz,anchor:'middle',fill:DC});
+    else text(xb+1,yLine-.6,label,{size:sz,fill:DC});
+  }
+  function dimV(ya,yb,xFrom,xLine,label){
+    if(ya>yb) [ya,yb]=[yb,ya]; if(yb-ya<.2) return;
+    const lf=xLine<xFrom?-1:1;
+    line(xFrom+lf*.8,ya,xLine+lf*1.2,ya,DC,.13); line(xFrom+lf*.8,yb,xLine+lf*1.2,yb,DC,.13);
+    line(xLine,ya,xLine,yb,DC,.16); arrowV(xLine,ya,1); arrowV(xLine,yb,-1);
+    const sz=1.9, w=tw(label,sz);
+    if(w+1.5<yb-ya) text(xLine-.6,(ya+yb)/2,label,{size:sz,anchor:'middle',fill:DC,rot:-90});
+    else text(xLine-.6,ya-1,label,{size:sz,anchor:'start',fill:DC,rot:-90});
+  }
+
+  /* frame and header */
+  rect(M,M,PW-2*M,PH-2*M,{sw:.5});
+  text(M+4,M+7,'CABINET LAYOUT',{size:4.6,weight:'bold'});
+  text(M+4+tw('CABINET LAYOUT',4.6)*1.22+6,M+7,`${c.name||'Cabinet'}${sh.project?' · '+sh.project:''}`,{size:3.4});
+  text(PW-M-4,M+7,`${c.family==='indoor'?'Indoor':'Outdoor'} · body ${fmt(c.W)} W × ${fmt(c.D)} D · ${fmt(Hm)} H overall · ${c.rackU}U`,{size:2.6,anchor:'end',fill:DC});
+  line(M,M+10,PW-M,M+10,INK,.3);
+
+  const fills={shell:'#f3f5f6',plinth:'#cfd4d8',hood:'#e2e6e9',door:'#e9ecee',rail:'#8f99a2',ups:'#2f8a57',err:'#c3342c',warn:'#c27c0e'};
+  const errBoxes=conflicts.filter(x=>x.box);
+  const vf = c.side;
+
+  function drawView(v){
+    const front=v.kind==='front', labels=[];
+    const body=B(-c.side,I.W+c.side,-c.floor,I.H+c.roof,-c.door,I.D+c.rear);
+    if(c.plinth>0) mrect(v,B(-c.side+15,I.W+c.side-15,yMin,-c.floor,-c.door+15,I.D+c.rear-15),{fill:fills.plinth,sw:.25});
+    mrect(v,body,{fill:fills.shell,sw:.4});
+    if(c.hood>0){
+      const y0=py(I.H+c.roof);
+      if(front){ const p=hb(v,B(xMin,xMax,I.H+c.roof,yMax,0,1)); rect(p.x,p.y,p.w,p.h,{fill:fills.hood,sw:.3}); }
+      else { const lip=Math.min(30,c.hood*.35), xf=v.px(zMin), xb=v.px(zMax); poly([[xf,y0],[xf,py(I.H+c.roof+lip)],[xb,py(yMax)],[xb,y0]],{fill:fills.hood,sw:.3}); }
+    }
+    if(!front) mrect(v,B(0,1,-c.floor,I.H+c.roof,-c.door,0),{fill:fills.door,sw:.25});
+    mrect(v,B(0,I.W,0,I.H,0,I.D),{st:'#6c757d',sw:.15,dash:'1.2 .8'});
+    // rails
+    (front?rails().slice(0,2):rails()).forEach(r=>mrect(v,r.box,{fill:fills.rail,st:'#5d6670',sw:.12}));
+    // U numbers on the front view
+    if(front){
+      const uh=U*k, step=uh<1.7?5:1, sz=Math.min(1.5,uh*.75), xr=v.px(I.W/2-PANEL_W/2)-.6;
+      for(let u=1;u<=c.rackU;u++) if(u%step===0||u===1) text(xr,py(uY(u)+U/2)+sz*.35,String(u),{size:sz,anchor:'end',fill:'#59626b'});
+    }
+    // UPS space
+    if(S.ups.enabled){ const p=mrect(v,upsBox(),{fill:fills.ups,op:.08,st:fills.ups,sw:.25,dash:'1.5 .8'});
+      if(front) text(p.x+p.w-1,p.y+p.h-1,'UPS SPACE',{size:1.7,anchor:'end',fill:fills.ups,weight:'bold'}); }
+    // equipment
+    S.items.forEach(it=>{
+      const b=itemBoxes(it);
+      if(front){
+        const p=mrect(v,b.plate,{fill:it.color,st:'#2a2f34',sw:.18});
+        const sz=Math.min(2.2,p.h*.62);
+        if(sz>=1.05){ const fg=hexLum(it.color)>.55?'#111':'#fff', ear=21*k+.7, ur=uRange(it);
+          labels.push(()=>{ text(p.x+p.w-ear,p.y+p.h/2+sz*.36,ur,{size:sz*.85,anchor:'end',fill:fg});
+            text(p.x+ear,p.y+p.h/2+sz*.36,fit(it.label,p.w-2*ear-tw(ur,sz*.85)-1.5,sz),{size:sz,fill:fg}); }); }
+      } else {
+        const u=B(0,1,b.body.y0,b.body.y1,Math.min(b.plate.z0,b.body.z0),Math.max(b.plate.z1,b.body.z1));
+        mrect(v,u,{fill:it.color,op:.85,st:'#2a2f34',sw:.15});
+      }
+      if(b.cable && !front) mrect(v,b.cable,{st:it.color,sw:.18,dash:'.8 .6'});
+    });
+    // fixtures
+    S.fixtures.forEach((f,i)=>{
+      const far=v.far(f), p=mrect(v,fixtureBox(f),{fill:f.color,op:far?.12:(front?.32:.55),st:far?'#7a8288':'#5a3b06',sw:far?.15:.3,dash:far?'1 .7':''});
+      if(f.clearance>0 && !far) mrect(v,grow(fixtureBox(f),f.clearance),{st:f.color,sw:.15,dash:'.6 .6'});
+      if(!far) labels.push(()=>text(p.x+p.w/2,p.y+p.h-1.4,`F${i+1}`,{size:2.2,anchor:'middle',weight:'bold',fill:'#3b2a05'}));
+    });
+    // clashes
+    errBoxes.forEach(cf=>mrect(v,cf.box,{fill:cf.sev==='err'?fills.err:fills.warn,op:.3,st:cf.sev==='err'?fills.err:fills.warn,sw:.3}));
+    labels.forEach(fn=>fn());
+  }
+  [vL,vF,vR].forEach(drawView);
+
+  /* dimensions per view */
+  const yB=py(yMin), lv=i=>yB+4+i*5.5;
+  // front: widths below
+  dimH(vF.px(0),vF.px(I.W),yB,lv(0),`${fmt(I.W)} interior`);
+  dimH(vF.px(-c.side),vF.px(I.W+c.side),yB,lv(1),`${fmt(c.W)}`);
+  if(c.hood>0 && hs>0) dimH(vF.px(xMin),vF.px(xMax),yB,lv(2),`${fmt(Wm)} rain hood`);
+  // front: heights at left
+  const xl=vF.px(xMin), lx=i=>xl-4-i*5.5, rackTop=c.rackBase+c.rackU*U;
+  dimV(py(0),py(c.rackBase),xl,lx(0),fmt(c.rackBase));
+  dimV(py(c.rackBase),py(rackTop),xl,lx(0),`${c.rackU}U = ${fmt(c.rackU*U)}`);
+  if(I.H-rackTop>.5) dimV(py(rackTop),py(I.H),xl,lx(0),fmt(I.H-rackTop));
+  if(c.plinth>0) dimV(py(yMin),py(-c.floor),xl,lx(1),fmt(c.plinth));
+  dimV(py(-c.floor),py(I.H+c.roof),xl,lx(1),`${fmt(c.H)} body`);
+  if(c.hood>0) dimV(py(I.H+c.roof),py(yMax),xl,lx(1),fmt(c.hood));
+  dimV(py(yMin),py(yMax),xl,lx(2),`${fmt(Hm)} overall`);
+  dimV(py(0),py(I.H),xl,lx(3),`${fmt(I.H)} interior`);
+  // front: fixture positions (height on the right, width on top)
+  const xr=vF.px(xMax), yT=py(yMax);
+  fixF.forEach((f,i)=>{ const b=fixtureBox(f), x=xr+4+i*5.5;
+    dimV(py(0),py(b.y0),xr,x,`F${i+1} ${fmt(b.y0)}`); dimV(py(b.y0),py(b.y1),xr,x,fmt(b.y1-b.y0));
+    const yl=yT-3-i*5; dimH(vF.px(0),vF.px(b.x0),yT,yl,`F${i+1} ${fmt(b.x0)}`); dimH(vF.px(b.x0),vF.px(b.x1),yT,yl,fmt(b.x1-b.x0)); });
+  // sides: depth chain below, interior height at outer edge, fixture depth positions above
+  [vL,vR].forEach(v=>{
+    dimH(v.px(0),v.px(c.railFront),yB,lv(0),fmt(c.railFront));
+    dimH(v.px(c.railFront),v.px(rearRail()),yB,lv(0),fmt(c.mountDepth));
+    if(I.D-rearRail()>.5) dimH(v.px(rearRail()),v.px(I.D),yB,lv(0),fmt(I.D-rearRail()));
+    dimH(v.px(-c.door),v.px(I.D+c.rear),yB,lv(1),`${fmt(c.D)}`);
+    if(hf>0) dimH(v.px(zMin),v.px(zMax),yB,lv(2),`${fmt(Dm)} rain hood`);
+    const xe=v.ox; dimV(py(0),py(I.H),xe,xe-4,`${fmt(I.H)}`);
+    let n=0; S.fixtures.forEach((f,i)=>{ if(v.far(f)||n>=3) return; const b=fixtureBox(f), yl=yT-3-n*5; n++;
+      dimH(v.px(0),v.px(b.z0),yT,yl,`F${i+1} ${fmt(b.z0)}`); dimH(v.px(b.z0),v.px(b.z1),yT,yl,fmt(b.z1-b.z0)); });
+  });
+  // view titles
+  const yTitle=lv(c.hood>0?2:1)+7;
+  [vL,vF,vR].forEach(v=>{ const w=v.kind==='front'?Wm*k:Dm*k, cx=v.ox+w/2;
+    text(cx,yTitle,v.name,{size:3,anchor:'middle',weight:'bold'});
+    text(cx,yTitle+3.4,`${v.note} · scale 1:${den}`,{size:2,anchor:'middle',fill:DC}); });
+
+  /* lower band: legend, schedule, fixtures + clash notes, title block */
+  const by=200, bb=PH-M-2;
+  line(M,by-2,PW-M,by-2,INK,.3);
+  // legend
+  const lgX=M+3; let ly=by+4;
+  text(lgX,ly,'LEGEND',{size:2.6,weight:'bold'}); ly+=4.2;
+  const used=[...new Set(S.items.map(i=>i.type))];
+  const sw=(fill,st,dash,op,label)=>{ rect(lgX,ly-2.4,6,3,{fill,st,sw:.25,dash,op}); text(lgX+8,ly,label,{size:2}); ly+=4; };
+  used.forEach(t=>{ const it=S.items.find(i=>i.type===t); sw(it.color,'#2a2f34','',1,TYPE_NAME[t]||t); });
+  sw('#d99a2b','#5a3b06','',.55,'Panel / fixture (F1, F2 …)');
+  sw('none','#d99a2b','.6 .6',1,'Fixture clearance zone');
+  sw('none','#6d7f8f','.8 .6',1,'Cable space in front of equipment');
+  if(S.ups.enabled) sw(fills.ups,fills.ups,'1.5 .8',.08,'Reserved UPS space');
+  sw(fills.rail,'#5d6670','',1,'19" mounting rail');
+  sw(fills.err,fills.err,'',.35,'Clash');
+  if(conflicts.some(x=>x.sev==='warn')) sw(fills.warn,fills.warn,'',.35,'Warning');
+  sw('none','#9aa2a8','1 .7',.12,'Fixture on far side (side views)');
+  // schedule
+  const sx=M+86, colW=[13,52,30,14,13]; let sy=by+4;
+  text(sx,sy,`EQUIPMENT SCHEDULE · ${S.items.reduce((s,i)=>s+i.h,0)} of ${c.rackU}U used`,{size:2.6,weight:'bold'}); sy+=4.4;
+  const heads=['U','Item','Type','Depth','Mount']; let cx=sx;
+  heads.forEach((h,i)=>{ text(cx,sy,h,{size:1.95,weight:'bold',fill:DC}); cx+=colW[i]; }); line(sx,sy+1,sx+colW.reduce((a,b)=>a+b),sy+1,INK,.2); sy+=4;
+  const rows=[...S.items].sort((a,b)=>uTop(b)-uTop(a)), maxRows=Math.floor((bb-sy)/3.5);
+  rows.slice(0,maxRows).forEach(it=>{ cx=sx; const cells=[uRange(it),it.label,TYPE_NAME[it.type]||it.type,`${fmt(it.depth)}`,it.mount==='rear'?'Rear':'Front'];
+    rect(sx-1.6,sy-2.1,1.1,2.4,{fill:it.color,st:'none',sw:0});
+    cells.forEach((s,i)=>{ text(cx,sy,fit(s,colW[i]-1.5,1.95),{size:1.95}); cx+=colW[i]; }); sy+=3.5; });
+  if(rows.length>maxRows) text(sx,sy,`+ ${rows.length-maxRows} more items`,{size:1.9,fill:DC});
+  // fixtures and clash notes
+  const fx=M+86+125, fw=PW-M-fx-2; let fy=by+4;
+  text(fx,fy,'PANELS & FIXTURES',{size:2.6,weight:'bold'}); fy+=4.4;
+  const fcol=[7,40,23,30,18]; cx=fx; ['Ref','Name','W×H×D','X / Y / Z','Location'].forEach((h,i)=>{ text(cx,fy,h,{size:1.95,weight:'bold',fill:DC}); cx+=fcol[i]; });
+  line(fx,fy+1,fx+fcol.reduce((a,b)=>a+b),fy+1,INK,.2); fy+=4;
+  S.fixtures.slice(0,6).forEach((f,i)=>{ cx=fx; [`F${i+1}`,f.name,`${fmt(f.w)}×${fmt(f.h)}×${fmt(f.d)}`,`${fmt(f.x)} / ${fmt(f.y)} / ${fmt(f.z)}`,fixtureWhere(f)].forEach((s,j)=>{ text(cx,fy,fit(s,fcol[j]-1.2,1.95),{size:1.95}); cx+=fcol[j]; }); fy+=3.4; });
+  if(!S.fixtures.length){ text(fx,fy,'None',{size:1.95,fill:DC}); fy+=3.4; }
+  fy+=1.6;
+  const errs=conflicts.filter(x=>x.sev==='err').length, warns=conflicts.length-errs;
+  text(fx,fy,`CLASH CHECK · ${conflicts.length?`${errs} clash${errs===1?'':'es'}, ${warns} warning${warns===1?'':'s'}`:'no clashes found'}`,{size:2.4,weight:'bold',fill:conflicts.length?(errs?fills.err:fills.warn):'#2c7a4b'}); fy+=3.6;
+  const tbY=bb-36, maxNotes=Math.max(0,Math.floor((tbY-2-fy)/3.1));
+  conflicts.slice(0,maxNotes).forEach(cf=>{ text(fx,fy,fit(`${cf.sev==='err'?'CLASH:':'WARN:'} ${cf.msg}`,fw,1.85),{size:1.85,fill:cf.sev==='err'?'#8e2219':'#7a4d06'}); fy+=3.1; });
+  if(conflicts.length>maxNotes) text(fx,fy,`+ ${conflicts.length-maxNotes} more (see planner)`,{size:1.85,fill:DC});
+  // title block
+  const tx=fx-2, tY=tbY, tW=PW-M-tx, tH=bb+2-tY;
+  rect(tx,tY,tW,tH,{sw:.4});
+  let textW=tW-6;
+  if(sh.logo && sh.logo.data){
+    const bw=44, bh=14, a=sh.logo.w/sh.logo.h; let w=bw, h=bw/a; if(h>bh){ h=bh; w=bh*a; }
+    const lx=tx+tW-3-w, ly=tY+2+(bh-h)/2;
+    o.push(`<image x="${r2(lx)}" y="${r2(ly)}" width="${r2(w)}" height="${r2(h)}" href="${sh.logo.data}" xlink:href="${sh.logo.data}" preserveAspectRatio="none"/>`);
+    textW=tW-w-9;
+  }
+  text(tx+3,tY+6,fit(c.name||'Cabinet',textW,4),{size:4,weight:'bold'});
+  text(tx+3,tY+11,fit(`${sh.project?sh.project+' · ':''}${c.model?`Model ${c.model} · `:''}${c.family==='indoor'?'Indoor wall cabinet':'Outdoor freestanding cabinet'}`,textW,2.3),{size:2.3,fill:DC});
+  text(tx+3,tY+15.2,fit(`Overall ${fmt(Wm)} W × ${fmt(Dm)} D × ${fmt(Hm)} H mm · interior ${fmt(I.W)} × ${fmt(I.D)} × ${fmt(I.H)} · ${c.rackU}U rack`,textW,2),{size:2,fill:DC});
+  line(tx,tY+18,tx+tW,tY+18,INK,.25);
+  const cells=[['SCALE',`1:${den} @ A3`],['DATE',new Date().toLocaleDateString('en-NZ')],['SHEET','1 of 1'],['DRAWN',sh.drawn||'']];
+  const cw=tW/4; cells.forEach(([h,v],i)=>{ const x=tx+i*cw; if(i) line(x,tY+18,x,tY+27,INK,.2); text(x+2,tY+21.2,h,{size:1.7,fill:DC}); text(x+2,tY+25.4,v,{size:2.5,weight:'bold'}); });
+  line(tx,tY+27,tx+tW,tY+27,INK,.25);
+  text(tx+3,tY+30.6,'All dimensions in mm, measured from inside faces unless noted.',{size:1.8,fill:DC});
+  text(tx+3,tY+33.6,'Some internal figures are estimated. Verify against manufacturer drawings before install.',{size:1.8,fill:DC});
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${PW}mm" height="${PH}mm" viewBox="0 0 ${PW} ${PH}"><rect x="0" y="0" width="${PW}" height="${PH}" fill="#ffffff"/>${o.join('')}</svg>`;
+}
+
+/* ---------- drawing view & export ---------- */
+let sheetOn=false, downloads=null;
+function renderSheet(){ $('sheetPaper').innerHTML=drawingSVG(); syncSheetFields(); }
+function syncSheetFields(){
+  if(!S.sheet) S.sheet={logo:null,project:'',drawn:''};
+  const sh=S.sheet, has=!!(sh.logo&&sh.logo.data);
+  $('logoPrev').style.backgroundImage = has ? `url("${sh.logo.data}")` : 'none';
+  $('logoDel').hidden=!has; $('logoAdd').textContent = has ? 'Replace logo' : 'Add company logo';
+  ['project','drawn'].forEach(k=>{ const n=$('sh-'+k); if(document.activeElement!==n) n.value=sh[k]||''; });
+}
+['project','drawn'].forEach(k=>$('sh-'+k).addEventListener('input',e=>{ S.sheet[k]=e.target.value; update(); }));
+$('logoDel').onclick=()=>{ S.sheet.logo=null; update(); Store.putLogo(null).catch(()=>{}); sheetMsg('Logo removed.'); };
+$('logoFile').onchange=e=>{
+  const file=e.target.files[0]; e.target.value=''; if(!file) return;
+  const r=new FileReader();
+  r.onload=()=>{ const img=new Image();
+    img.onload=()=>{
+      let iw=img.naturalWidth||img.width, ih=img.naturalHeight||img.height; if(!iw||!ih){ iw=600; ih=300; }
+      const sc=Math.min(1,700/Math.max(iw,ih)), cv=document.createElement('canvas');
+      cv.width=Math.max(1,Math.round(iw*sc)); cv.height=Math.max(1,Math.round(ih*sc));
+      cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+      try{ let data=cv.toDataURL('image/png');
+        if(data.length>230000){ const g=cv.getContext('2d'); g.globalCompositeOperation='destination-over'; g.fillStyle='#fff'; g.fillRect(0,0,cv.width,cv.height); data=cv.toDataURL('image/jpeg',.9); }
+        S.sheet.logo={data,w:cv.width,h:cv.height,name:file.name}; update(); Store.putLogo(S.sheet.logo).catch(()=>{}); sheetMsg(`Logo added from ${file.name}. It is used on every project.`); }
+      catch(err){ sheetMsg('That image could not be used. Try a PNG or JPG.'); }
+    };
+    img.onerror=()=>sheetMsg(`${file.name} could not be read as an image. Use PNG, JPG or SVG.`);
+    img.src=r.result; };
+  r.readAsDataURL(file);
+};
+function showSheet(on){
+  sheetOn=on; $('sheet').hidden=!on; $('cf').hidden=on; $('fitBtn').hidden=on;
+  document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('on', on ? b.dataset.view==='sheet' : b.dataset.view===view));
+  if(on) renderSheet();
+}
+const fileBase=()=>((S.cab.model||S.cab.name||'cabinet')+'-layout').replace(/[^\w.-]+/g,'-');
+function sheetMsg(t){ $('sheetMsg').textContent=t; }
+async function vectorPDF(){
+  const {jsPDF}=window.jspdf; const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a3'});
+  const holder=document.createElement('div'); holder.style.cssText='position:fixed;left:-20000px;top:0;width:1600px;pointer-events:none';
+  holder.innerHTML=drawingSVG(); document.body.append(holder);
+  try{ const svg=holder.querySelector('svg');
+    if(typeof doc.svg==='function') await doc.svg(svg,{x:0,y:0,width:420,height:297});
+    else await window.svg2pdf.svg2pdf(svg,doc,{x:0,y:0,width:420,height:297}); }
+  finally{ holder.remove(); }
+  return doc.output('blob');
+}
+async function rasterPDF(){
+  const {jsPDF}=window.jspdf, url=URL.createObjectURL(new Blob([drawingSVG()],{type:'image/svg+xml'})), img=new Image();
+  try{ await new Promise((res,rej)=>{ img.onload=res; img.onerror=rej; img.src=url; }); } finally{}
+  const cv=document.createElement('canvas'); cv.width=4961; cv.height=3508; const g=cv.getContext('2d');
+  g.fillStyle='#fff'; g.fillRect(0,0,cv.width,cv.height); g.drawImage(img,0,0,cv.width,cv.height); URL.revokeObjectURL(url);
+  const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a3'}); doc.addImage(cv.toDataURL('image/jpeg',.92),'JPEG',0,0,420,297);
+  return doc.output('blob');
+}
+const standalone = !(window.claude && typeof window.claude.use==='function');
+async function saveFile(name,data,say=sheetMsg){
+  if(standalone){
+    const blob = data instanceof Blob ? data : new Blob([data],{type:name.endsWith('.svg')?'image/svg+xml':name.endsWith('.json')?'application/json':'application/octet-stream'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.append(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },3000); say(`Downloaded ${name}.`); return;
+  }
+  if(!downloads){ say('File saving is not available in this view.'); return; }
+  try{ await downloads.save({filename:name,data}); say(`Saved ${name}.`); }
+  catch(e){ say(e&&e.code==='declined'?'Save cancelled.':`Could not save the file (${(e&&(e.code||e.message))||'unknown error'}).`); }
+}
+$('pdfBtn').onclick=async()=>{
+  if(!window.jspdf){ sheetMsg('The PDF tool did not load. Check your connection and reload the page.'); return; }
+  sheetMsg('Building the PDF…'); let blob;
+  try{ blob = window.svg2pdf ? await vectorPDF() : await rasterPDF(); }
+  catch(e){ try{ blob=await rasterPDF(); }catch(e2){ sheetMsg('Could not build the PDF in this browser.'); return; } }
+  await saveFile(fileBase()+'.pdf',blob);
+};
+$('svgBtn').onclick=()=>saveFile(fileBase()+'.svg',drawingSVG());
+(async()=>{
+  if(standalone) return;   // plain browser: ordinary downloads work
+  try{ downloads = await window.claude.use('downloads'); }catch(e){ downloads=null; }
+  if(!downloads){ $('pdfBtn').hidden=true; $('svgBtn').hidden=true; $('pjFile').hidden=true; sheetMsg('File saving is not available in this view. The drawing can still be viewed here.'); }
+})();
+
+/* ---------- projects: Claude account when available, else this browser ---------- */
+const LKEY='rack-planner-projects-v1', LOGOKEY='rack-planner-logo-v1';
+const Store={
+  kind:'local', db:null, uid:null,
+  _l(){ try{ return JSON.parse(localStorage.getItem(LKEY))||{}; }catch(e){ return {}; } },
+  _w(m){ localStorage.setItem(LKEY,JSON.stringify(m)); },
+  col(){ return this.db.collection('data/users/'+this.uid); },
+  async list(){
+    if(this.kind==='cloud'){ const qs=await this.col().get(); return qs.docs.filter(d=>d.id.startsWith('p-')).map(d=>{ const v=d.data()||{}; return {id:d.id.slice(2),name:v.name,model:v.model,updated:v.updated}; }); }
+    const m=this._l(); return Object.keys(m).map(id=>({id,name:m[id].name,model:m[id].model,updated:m[id].updated}));
+  },
+  async get(id){
+    if(this.kind==='cloud'){ const d=await this.col().doc('p-'+id).get(); return d.exists?JSON.parse(d.data().data):null; }
+    const m=this._l(); return m[id]?JSON.parse(m[id].data):null;
+  },
+  async put(id,meta,data){
+    const body=Object.assign({},meta,{data:JSON.stringify(data)});
+    if(this.kind==='cloud') await this.col().doc('p-'+id).set(body); else { const m=this._l(); m[id]=body; this._w(m); }
+  },
+  async del(id){ if(this.kind==='cloud') await this.col().doc('p-'+id).delete(); else { const m=this._l(); delete m[id]; this._w(m); } },
+  async getLogo(){
+    if(this.kind==='cloud'){ const d=await this.col().doc('logo').get(); return d.exists?(d.data().logo||null):null; }
+    try{ return JSON.parse(localStorage.getItem(LOGOKEY)); }catch(e){ return null; }
+  },
+  async putLogo(l){
+    if(this.kind==='cloud'){ const ref=this.col().doc('logo'); return l ? ref.set({logo:l}) : ref.delete(); }
+    try{ l ? localStorage.setItem(LOGOKEY,JSON.stringify(l)) : localStorage.removeItem(LOGOKEY); }catch(e){}
+  }
+};
+const where = () => Store.kind==='cloud' ? 'your Claude account' : 'this browser';
+const pjSay = t => { $('pjStatus').textContent=t; };
+const projectData = () => { const d=clone(S); if(d.sheet) d.sheet.logo=null; delete d.projectId; return d; };
+const snapshot = () => JSON.stringify(projectData());
+let savedSnap=null, projects=[], armed={};   // armed: two-step confirmations
+function isDirty(){ return !!S.projectId && savedSnap!==null && snapshot()!==savedSnap; }
+function projName(){ return (S.sheet&&S.sheet.project)||S.cab.name||'Untitled project'; }
+
+async function refreshProjects(){
+  try{ projects=(await Store.list()).sort((a,b)=>(b.updated||0)-(a.updated||0)); }
+  catch(e){ projects=[]; pjSay(`Could not read saved projects (${e.code||e.message}).`); }
+  renderProjects();
+}
+function renderProjects(){
+  const n=$('pj-name'); if(document.activeElement!==n) n.value=(S.sheet&&S.sheet.project)||'';
+  $('projCount').textContent = projects.length ? `${projects.length} saved` : '';
+  const list=$('pjList'); list.replaceChildren();
+  if(!projects.length) list.append(el('div',{class:'empty'},`No saved projects yet. Name this layout and press Save to keep it in ${where()}.`));
+  projects.forEach(p=>{
+    const cur=p.id===S.projectId, d=p.updated?new Date(p.updated).toLocaleString('en-NZ',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'';
+    const delBtn=el('button',{class:'btn danger',type:'button',onclick:()=>delProject(p)},armed['del'+p.id]?'Confirm':'Delete');
+    list.append(el('div',{class:'pj'+(cur?' cur':'')},
+      el('button',{class:'open',type:'button',onclick:()=>openProject(p)},el('b',{},(p.name||'Untitled')+(cur&&isDirty()?' •':'')),el('small',{},`${p.model||''}${p.model&&d?' · ':''}${d}`)),
+      el('div',{class:'acts'},el('button',{class:'btn',type:'button',onclick:()=>dupProject(p)},'Copy'),delBtn)));
+  });
+  const st=$('pjStatus');
+  if(!st.dataset.hold){
+    if(!S.projectId) st.textContent=`Not saved yet. Projects are kept in ${where()}.`;
+    else st.innerHTML = isDirty() ? `<span class="dirty">Unsaved changes</span> to “${esc(projName())}”.` : `“${esc(projName())}” is saved in ${where()}.`;
+  }
+}
+function esc(t){ return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function hold(msg){ const st=$('pjStatus'); st.textContent=msg; st.dataset.hold='1'; clearTimeout(hold.t); hold.t=setTimeout(()=>{ delete st.dataset.hold; renderProjects(); },3500); }
+
+async function saveProject(asNew){
+  if(!S.sheet) S.sheet={logo:null,project:'',drawn:''};
+  if(!S.sheet.project) S.sheet.project=S.cab.name||'Untitled project';
+  const id = (!asNew && S.projectId) ? S.projectId : uid()+uid();
+  if(asNew && S.projectId) S.sheet.project=projName()+(projects.some(p=>p.name===projName())?' (copy)':'');
+  const data=projectData();
+  try{
+    await Store.put(id,{name:projName(),model:S.cab.model||S.cab.name||'',updated:Date.now()},data);
+    S.projectId=id; savedSnap=snapshot(); save(); hold(`Saved “${projName()}” to ${where()}.`); await refreshProjects();
+  }catch(e){
+    if(Store.kind==='cloud' && e && (e.code==='invalid_argument'||e.code==='not_granted')){ Store.kind='local'; hold('Saving to your Claude account is not allowed here, so projects are kept in this browser instead.'); return saveProject(asNew); }
+    hold(`Could not save (${(e&&(e.code||e.message))||'error'}).`);
+  }
+}
+async function openProject(p){
+  if(isDirty() && p.id!==S.projectId && !armed['open'+p.id]){ armed={['open'+p.id]:1}; hold(`“${projName()}” has unsaved changes. Click “${p.name}” again to open it anyway.`); setTimeout(()=>{ delete armed['open'+p.id]; },5000); return; }
+  armed={};
+  try{
+    const data=await Store.get(p.id); if(!data){ hold('That project could not be found.'); return refreshProjects(); }
+    const logo=S.sheet&&S.sheet.logo; loadLayout(data); S.projectId=p.id; S.sheet.logo=logo||null; savedSnap=snapshot(); save(); renderProjects(); hold(`Opened “${p.name}”.`);
+  }catch(e){ hold(`Could not open the project (${(e&&(e.code||e.message))||'error'}).`); }
+}
+async function dupProject(p){
+  try{ const data=await Store.get(p.id); if(!data) return; data.sheet=data.sheet||{}; data.sheet.project=(p.name||'Untitled')+' (copy)';
+    await Store.put(uid()+uid(),{name:data.sheet.project,model:p.model,updated:Date.now()},data); hold(`Copied “${p.name}”.`); refreshProjects(); }
+  catch(e){ hold(`Could not copy (${(e&&(e.code||e.message))||'error'}).`); }
+}
+async function delProject(p){
+  if(!armed['del'+p.id]){ armed={['del'+p.id]:1}; renderProjects(); setTimeout(()=>{ if(armed['del'+p.id]){ armed={}; renderProjects(); } },4000); return; }
+  armed={};
+  try{ await Store.del(p.id); if(S.projectId===p.id){ delete S.projectId; savedSnap=null; save(); } hold(`Deleted “${p.name}”.`); refreshProjects(); }
+  catch(e){ hold(`Could not delete (${(e&&(e.code||e.message))||'error'}).`); }
+}
+function newProject(){
+  if(isDirty() && !armed.new){ armed={new:1}; hold('This project has unsaved changes. Click New project again to start a fresh one anyway.'); setTimeout(()=>{ delete armed.new; },5000); return; }
+  armed={};
+  const logo=S.sheet&&S.sheet.logo, cab=clone(S.cab);
+  loadLayout({cab, ups:{enabled:false,startU:1,heightU:2,depth:400}, items:[], fixtures:[], sheet:{logo:logo||null,project:'',drawn:(S.sheet&&S.sheet.drawn)||''}});
+  delete S.projectId; savedSnap=null; save(); renderProjects(); hold('New empty project using the current cabinet. Name it and press Save.');
+}
+$('pjSave').onclick=()=>saveProject(false);
+$('pjSaveAs').onclick=()=>saveProject(true);
+$('pjNew').onclick=newProject;
+$('pj-name').addEventListener('input',e=>{ if(!S.sheet) S.sheet={logo:null,project:'',drawn:''}; S.sheet.project=e.target.value; update(); });
+$('pjFile').onclick=()=>saveFile(((projName())+'.json').replace(/[^\w. -]+/g,'-'),JSON.stringify(Object.assign(projectData(),{sheet:Object.assign({},S.sheet)}),null,2),hold);
+document.addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){ e.preventDefault(); saveProject(false); } });
+
+(async()=>{
+  if(!standalone){
+    try{
+      const [db,user]=await Promise.all([window.claude.use('db'),window.claude.use('user')]);
+      const id = user ? await user.id() : null;
+      if(db && id){ Store.kind='cloud'; Store.db=db; Store.uid=id; }
+    }catch(e){}
+  }
+  try{ const l=await Store.getLogo(); if(l && !(S.sheet&&S.sheet.logo)){ S.sheet=S.sheet||{}; S.sheet.logo=l; update(); } }catch(e){}
+  if(S.projectId){ try{ const d=await Store.get(S.projectId); savedSnap = d ? JSON.stringify(Object.assign(d,{sheet:Object.assign({},d.sheet,{logo:null})})) : null; if(!d) delete S.projectId; }catch(e){} }
+  await refreshProjects();
+})();
+
+/* ---------- toolbar ---------- */
+document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>{ if(b.dataset.view==='sheet') showSheet(true); else { showSheet(false); setView(b.dataset.view); } }));
+$('fitBtn').onclick=()=>setView(view);
+document.querySelectorAll('[data-t]').forEach(b=>b.addEventListener('click',()=>{ const k=b.dataset.t; T[k]=!T[k]; b.setAttribute('aria-pressed',T[k]); build(); }));
+
+/* ---------- main update ---------- */
+function update(){
+  conflicts=computeConflicts();
+  badIds=new Map();
+  conflicts.forEach(c=>c.ids.forEach(id=>{ if(badIds.get(id)!=='err') badIds.set(id,c.sev); }));
+  build(); renderLists(); renderConflicts(); save();
+  if(sheetOn) renderSheet();
+  if(typeof renderProjects==='function' && $('pjList')) renderProjects();
+}
+
+renderCab(); renderUps(); renderEditor(); update();
+if(renderer){
+  new ResizeObserver(resize).observe(vp); resize(); setView('3d'); loop();
+  if(document.fonts && document.fonts.ready) document.fonts.ready.then(build);
+  const rebuild=()=>build();
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',rebuild);
+  new MutationObserver(rebuild).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+}
+})();
+</script>
+
+</body>
+</html>
